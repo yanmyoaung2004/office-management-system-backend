@@ -198,43 +198,6 @@ class FollowUpSession(models.Model):
     def __str__(self):
         return f"Follow-up {self.id} for {self.enquiry.student_name}"
 
-class DailyReport(models.Model):
-    """Daily activity report."""
-    id = models.CharField(primary_key=True, max_length=20, editable=False)
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name='reports'
-    )
-    date = models.DateField()
-    activities = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def save(self, *args, **kwargs):
-        if not self.id:
-            self.id = generate_id('R', DailyReport)
-        super().save(*args, **kwargs)
-
-    @property
-    def enquiry_count(self):
-        return self.report_enquiries.count()
-
-    def __str__(self):
-        return f"Report {self.id} - {self.user.full_name} - {self.date}"
-
-class ReportEnquiry(models.Model):
-    """Link between report and enquiries handled."""
-    report = models.ForeignKey(
-        DailyReport, on_delete=models.CASCADE, related_name='report_enquiries'
-    )
-    enquiry = models.ForeignKey(
-        Enquiry, on_delete=models.CASCADE, related_name='report_mentions'
-    )
-    action = models.CharField(max_length=255)
-
-    class Meta:
-        unique_together = ['report', 'enquiry']
-        verbose_name_plural = 'Report enquiries'
-
 class Student(models.Model):
     """Core Identity: Data that stays with the person regardless of intake."""
     id = models.CharField(primary_key=True, max_length=20, editable=False)
