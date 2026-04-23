@@ -17,82 +17,43 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # --- DEPARTMENT MODEL ---
         migrations.CreateModel(
-            name='Enquiry',
+            name='Department',
             fields=[
-                ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
-                ('date', models.DateField()),
-                ('desired_program', models.CharField(max_length=255)),
-                ('student_name', models.CharField(max_length=255)),
-                ('education_level', models.CharField(max_length=255)),
-                ('student_contact_no', models.CharField(max_length=50)),
-                ('parent_name', models.CharField(max_length=255)),
-                ('parent_contact_no', models.CharField(max_length=50)),
-                ('address', models.TextField()),
-                ('enquiry_type', models.CharField(choices=[('Enquiry', 'Enquiry'), ('Walk-in', 'Walk-in'), ('Phone', 'Phone'), ('Facebook', 'Facebook')], max_length=20)),
-                ('source_of_information', models.CharField(choices=[('Friend', 'Friend'), ('Facebook', 'Facebook'), ('Pamphlet', 'Pamphlet'), ('Newspaper', 'Newspaper'), ('Others', 'Others')], max_length=20)),
-                ('remark', models.TextField(blank=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-            ],
-        ),
-        migrations.CreateModel(
-            name='Major',
-            fields=[
-                ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=255, unique=True)),
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=100, unique=True)),
                 ('code', models.CharField(max_length=10, unique=True)),
-                ('description', models.TextField(blank=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
             ],
         ),
-        migrations.CreateModel(
-            name='Year',
-            fields=[
-                ('id', models.CharField(primary_key=True, max_length=20, editable=False, serialize=False)),
-                ('name', models.CharField(max_length=255)),
-                ('yearNumber', models.IntegerField(blank=True, null=True)),
-                ('type', models.CharField(max_length=20, choices=[('FOUNDATION', 'Foundation'), ('NORMAL', 'Normal')], default='NORMAL')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('major', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='years', to='core.Major')),
-            ],
-            options={
-                'unique_together': {('major', 'yearNumber')},
-                'ordering': ['yearNumber'],
-            },
-        ),
-        migrations.CreateModel(
-            name='Semester',
-            fields=[
-                ('id', models.CharField(primary_key=True, max_length=20, editable=False, serialize=False)),
-                ('semester_number', models.PositiveSmallIntegerField()),
-                ('name', models.CharField(max_length=50)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('year', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='semesters', to='core.Year')),
-            ],
-            options={
-                'unique_together': {('year', 'semester_number')},
-                'ordering': ['semester_number'],
-            },
-        ),
+        # --- USER MODEL ---
         migrations.CreateModel(
             name='User',
             fields=[
                 ('password', models.CharField(max_length=128, verbose_name='password')),
                 ('last_login', models.DateTimeField(blank=True, null=True, verbose_name='last login')),
-                ('is_superuser', models.BooleanField(default=False, help_text='Designates that this user has all permissions without explicitly assigning them.', verbose_name='superuser status')),
-                ('username', models.CharField(error_messages={'unique': 'A user with that username already exists.'}, help_text='Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.', max_length=150, unique=True, validators=[django.contrib.auth.validators.UnicodeUsernameValidator()], verbose_name='username')),
+                ('is_superuser', models.BooleanField(default=False, help_text='Designates that this user has all permissions.', verbose_name='superuser status')),
+                ('username', models.CharField(error_messages={'unique': 'A user with that username already exists.'}, max_length=150, unique=True, validators=[django.contrib.auth.validators.UnicodeUsernameValidator()], verbose_name='username')),
                 ('first_name', models.CharField(blank=True, max_length=150, verbose_name='first name')),
                 ('last_name', models.CharField(blank=True, max_length=150, verbose_name='last name')),
                 ('is_staff', models.BooleanField(default=False, help_text='Designates whether the user can log into this admin site.', verbose_name='staff status')),
-                ('is_active', models.BooleanField(default=True, help_text='Designates whether this user should be treated as active. Unselect this instead of deleting accounts.', verbose_name='active')),
+                ('is_active', models.BooleanField(default=True, help_text='Designates whether this user should be treated as active.', verbose_name='active')),
                 ('date_joined', models.DateTimeField(default=django.utils.timezone.now, verbose_name='date joined')),
                 ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
                 ('full_name', models.CharField(max_length=255)),
-                ('role', models.CharField(choices=[('admin', 'admin'), ('staff', 'staff')], default='staff', max_length=10)),
                 ('email', models.EmailField(max_length=254, unique=True)),
-                ('groups', models.ManyToManyField(blank=True, help_text='The groups this user belongs to. A user will get all permissions granted to each of their groups.', related_name='user_set', related_query_name='user', to='auth.group', verbose_name='groups')),
-                ('user_permissions', models.ManyToManyField(blank=True, help_text='Specific permissions for this user.', related_name='user_set', related_query_name='user', to='auth.permission', verbose_name='user permissions')),
+                ('role', models.CharField(choices=[
+                    ('ADMINISTRATOR', 'Administrator'),
+                    ('CONSULTANT', 'Consultant'),
+                    ('EXECUTIVE_DIRECTOR', 'Executive Director'),
+                    ('COURSE_COORDINATOR', 'Course Coordinator'),
+                    ('ACCOUNT_MANAGER', 'Account Manager'),
+                    ('CENTRE_MANAGER', 'Centre Manager'),
+                    ('OFFICER', 'Officer/Staff')
+                ], default='OFFICER', max_length=30)),
+                ('department', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='staff', to='core.department')),
+                ('groups', models.ManyToManyField(blank=True, related_name='user_set', related_query_name='user', to='auth.group', verbose_name='groups')),
+                ('user_permissions', models.ManyToManyField(blank=True, related_name='user_set', related_query_name='user', to='auth.permission', verbose_name='user permissions')),
             ],
             options={
                 'db_table': 'users',
@@ -101,86 +62,66 @@ class Migration(migrations.Migration):
                 ('objects', django.contrib.auth.models.UserManager()),
             ],
         ),
+
+        # --- ACADEMIC STRUCTURE ---
         migrations.CreateModel(
-            name='DailyReport',
+            name='Major',
             fields=[
                 ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
-                ('date', models.DateField()),
-                ('activities', models.TextField()),
+                ('name', models.CharField(max_length=255, unique=True)),
+                ('code', models.CharField(max_length=10, unique=True)),
+                ('description', models.TextField(blank=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='reports', to=settings.AUTH_USER_MODEL)),
             ],
         ),
         migrations.CreateModel(
-            name='FollowUpSession',
+            name='Year',
             fields=[
                 ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
-                ('date', models.DateField()),
-                ('handled_by', models.CharField(max_length=255)),
-                ('walkup_followup', models.BooleanField(default=False)),
-                ('remark', models.TextField()),
+                ('name', models.CharField(max_length=255)),
+                ('yearNumber', models.IntegerField(blank=True, null=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('enquiry', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='followups', to='core.enquiry')),
+                ('major', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='years', to='core.Major')),
             ],
+            options={'ordering': ['yearNumber'], 'unique_together': {('major', 'yearNumber')}},
+        ),
+        migrations.CreateModel(
+            name='Semester',
+            fields=[
+                ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
+                ('semester_number', models.PositiveSmallIntegerField()),
+                ('name', models.CharField(max_length=50)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('year', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='semesters', to='core.Year')),
+            ],
+            options={'ordering': ['semester_number'], 'unique_together': {('year', 'semester_number')}},
         ),
         migrations.CreateModel(
             name='Intake',
             fields=[
                 ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
                 ('code', models.CharField(max_length=20)),
-                ('year', models.IntegerField()),
                 ('start_date', models.DateField()),
-                ('end_date', models.DateField(null=True, blank=True)),
                 ('capacity', models.PositiveIntegerField()),
+                ('academic_calendar_received', models.BooleanField(default=False)),
+                ('timetable_received', models.BooleanField(default=False)),
+                ('textbooks_ordered', models.BooleanField(default=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('major', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='intakes', to='core.major')),
-                ('current_semester', models.ForeignKey(
-                    blank=True, 
-                    null=True, 
-                    on_delete=django.db.models.deletion.SET_NULL, 
-                    related_name='current_intakes', 
-                    to='core.semester'
-                )),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('major', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.Major')),
             ],
         ),
-        migrations.CreateModel(
-            name='IntakeSemester',
-            fields=[
-                ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
-                ('start_date', models.DateField()),
-                ('end_date', models.DateField()),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('intake', models.ForeignKey(
-                    on_delete=django.db.models.deletion.CASCADE, 
-                    related_name='semester_schedules', 
-                    to='core.intake'
-                )),
-                ('semester', models.ForeignKey(
-                    on_delete=django.db.models.deletion.CASCADE, 
-                    related_name='intake_schedules', 
-                    to='core.semester'
-                )),
-            ],
-            options={
-                'unique_together': {('intake', 'semester')},
-                'ordering': ['start_date'],
-            },
-        ),
+
+        # --- STUDENT & ENROLLMENT ---
         migrations.CreateModel(
             name='Student',
             fields=[
                 ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
                 ('full_name', models.CharField(max_length=255)),
-                ('referral_name', models.CharField(max_length=255)),
-                ('education_level', models.CharField(max_length=255)),
-                ('street', models.CharField(max_length=255)),
-                ('city', models.CharField(max_length=255)),
-                ('region', models.CharField(max_length=255)),
-                ('gender', models.CharField(choices=[('Male', 'Male'), ('Female', 'Female'), ('Other', 'Other')], max_length=10)),
                 ('nrc', models.CharField(max_length=50)),
-                ('birth_date', models.DateField()),
                 ('student_phone_no', models.CharField(max_length=50)),
                 ('parent_name', models.CharField(max_length=255)),
                 ('parent_phone_no', models.CharField(max_length=50)),
@@ -193,72 +134,58 @@ class Migration(migrations.Migration):
             name='Enrollment',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('status', models.CharField(choices=[('Enrolled', 'Enrolled'), ('Dropout', 'Dropout'), ('Interrupted', 'Interrupted'), ('Graduated', 'Graduated')], default='Enrolled', max_length=20)),
-                ('enrolled_date', models.DateField()),
-                ('scholar', models.BooleanField(default=False)),
-                ('registration_fee', models.BooleanField(default=False)),
-                ('first_installment_fee', models.BooleanField(default=False)),
-                ('nrc_copy', models.BooleanField(default=False)),
-                ('census_copy', models.BooleanField(default=False)),
-                ('passport_photo', models.BooleanField(default=False)),
-                ('education_certificate', models.BooleanField(default=False)),
-                ('remark', models.TextField(blank=True)),
+                ('status', models.CharField(default='Enrolled', max_length=20)),
+                ('contract_signed', models.BooleanField(default=False)),
+                ('id_card_ordered', models.BooleanField(default=False)),
+                ('id_card_issued', models.BooleanField(default=False)),
+                ('parent_present_at_induction', models.BooleanField(default=False)),
+                ('student_present_at_induction', models.BooleanField(default=False)),
+                ('intake', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.Intake')),
+                ('student', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='enrollments', to='core.Student')),
+            ],
+        ),
+
+        # --- SOP DOCUMENT WORKFLOWS ---
+        migrations.CreateModel(
+            name='DocumentRequest',
+            fields=[
+                ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
+                ('request_type', models.CharField(choices=[('REC', 'Recommendation'), ('TRN', 'Transcript'), ('CRT', 'Certificate')], max_length=3)),
+                ('finance_approved', models.BooleanField(default=False)),
+                ('admin_ref_number', models.CharField(blank=True, max_length=50)),
+                ('is_collected', models.BooleanField(default=False)),
+                ('date_ready', models.DateField(blank=True, null=True)),
+                ('follow_up_needed', models.BooleanField(default=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('intake', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='enrollments', to='core.intake')),
-                ('student', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='enrollments', to='core.student')),
+                ('student', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.Student')),
             ],
         ),
         migrations.CreateModel(
-            name='Dropout',
+            name='OverseasRecord',
             fields=[
                 ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
-                ('dropout_date', models.DateField()),
-                ('reason', models.TextField(max_length=255)),
-                ('followup_date', models.DateField()),
-                ('remark', models.TextField(blank=True)),
+                ('waybill_number', models.CharField(max_length=100)),
+                ('document_types', models.CharField(max_length=255)),
+                ('received_from_partner_date', models.DateField()),
+                ('scanned_copy', models.FileField(blank=True, null=True, upload_to='overseas_docs/')),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('enrollment', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='dropout_record', to='core.enrollment')),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('enrollment', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.Enrollment')),
             ],
         ),
-        # migrations.CreateModel(
-        #     name='ReportEnquiry',
-        #     fields=[
-        #         ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-        #         ('action', models.CharField(max_length=255)),
-        #         ('enquiry', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='report_mentions', to='core.enquiry')),
-        #         ('report', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='report_enquiries', to='core.dailyreport')),
-        #     ],
-        #     options={
-        #         'verbose_name_plural': 'Report enquiries',
-        #         'unique_together': {('report', 'enquiry')},
-        #     },
-        # ),
+
+        # --- NOTIFICATIONS ---
         migrations.CreateModel(
             name='Notification',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('title', models.CharField(max_length=255)),
                 ('message', models.TextField()),
-                ('alert_type', models.CharField(default='FOLLOW_UP', max_length=50)),
                 ('is_read', models.BooleanField(default=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('student', models.ForeignKey(
-                    blank=True, 
-                    null=True, 
-                    on_delete=django.db.models.deletion.CASCADE, 
-                    to='core.student'
-                )),
-                ('user', models.ForeignKey(
-                    blank=True, 
-                    null=True, 
-                    on_delete=django.db.models.deletion.CASCADE, 
-                    related_name='notifications', 
-                    to=settings.AUTH_USER_MODEL
-                )),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
             ],
-            options={
-                'ordering': ['-created_at'],
-            },
+            options={'ordering': ['-created_at']},
         ),
     ]

@@ -5,7 +5,7 @@ from django.utils.translation import gettext_lazy as _
 from django.contrib.auth import authenticate
 from .models import (
     User, Major, Year, Semester, Intake, Student, Enquiry,
-    FollowUpSession, DailyReport, ReportEnquiry, Dropout, Enrollment, Notification
+    FollowUpSession, Dropout, Enrollment, Notification
 )
 
 
@@ -655,112 +655,6 @@ class FollowUpUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = FollowUpSession
         fields = ['date', 'handledBy', 'walkupFollowup', 'remark']
-
-
-# Report
-class ReportEnquirySerializer(serializers.ModelSerializer):
-    enquiryId = serializers.CharField(source='enquiry_id')
-    studentName = serializers.CharField(
-        source='enquiry.student_name', read_only=True
-    )
-
-    class Meta:
-        model = ReportEnquiry
-        fields = ['enquiryId', 'studentName', 'action']
-
-
-class ReportListSerializer(serializers.ModelSerializer):
-    userId = serializers.CharField(source='user_id')
-    userName = serializers.CharField(source='user.full_name')
-    enquiryCount = serializers.IntegerField(read_only=True)
-    createdAt = serializers.DateTimeField(source='created_at')
-
-    class Meta:
-        model = DailyReport
-        fields = ['id', 'userId', 'userName', 'date', 'activities', 'enquiryCount', 'createdAt']
-
-
-class ReportDetailSerializer(ReportListSerializer):
-    enquiriesHandled = serializers.SerializerMethodField()
-    updatedAt = serializers.DateTimeField(source='updated_at')
-
-    class Meta(ReportListSerializer.Meta):
-        fields = ReportListSerializer.Meta.fields + ['enquiriesHandled', 'updatedAt']
-
-    def get_enquiriesHandled(self, obj):
-        return [
-            {
-                'enquiryId': re.enquiry_id,
-                'studentName': re.enquiry.student_name,
-                'action': re.action
-            }
-            for re in obj.report_enquiries.select_related('enquiry').all()
-        ]
-
-
-class ReportCreateSerializer(serializers.ModelSerializer):
-    userId = serializers.PrimaryKeyRelatedField(
-        source='user', queryset=User.objects.all()
-    )
-    enquiriesHandled = serializers.ListField(
-        child=serializers.DictField(),
-        write_only=True,
-        required=False
-    )
-
-    class Meta:
-        model = DailyReport
-        fields = ['userId', 'date', 'activities', 'enquiriesHandled']
-
-    def validate_activities(self, value):
-        if len(value) < 10:
-            raise serializers.ValidationError('Activities must be at least 10 characters')
-        return value
-
-    def create(self, validated_data):
-        enquiries_data = validated_data.pop('enquiriesHandled', [])
-        if DailyReport.objects.filter(
-            user=validated_data['user'],
-            date=validated_data['date']
-        ).exists():
-            raise serializers.ValidationError(
-                'Report for this user and date already exists'
-            )
-        report = DailyReport.objects.create(**validated_data)
-        for item in enquiries_data:
-            ReportEnquiry.objects.create(
-                report=report,
-                enquiry_id=item['enquiryId'],
-                action=item['action']
-            )
-        return report
-
-
-class ReportUpdateSerializer(serializers.ModelSerializer):
-    enquiriesHandled = serializers.ListField(
-        child=serializers.DictField(),
-        required=False
-    )
-
-    class Meta:
-        model = DailyReport
-        fields = ['activities', 'enquiriesHandled']
-
-    def update(self, instance, validated_data):
-        enquiries_data = validated_data.pop('enquiriesHandled', None)
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        if enquiries_data is not None:
-            instance.report_enquiries.all().delete()
-            for item in enquiries_data:
-                ReportEnquiry.objects.create(
-                    report=instance,
-                    enquiry_id=item['enquiryId'],
-                    action=item['action']
-                )
-        return instance
-
 
 # Dropout
 class DropoutSerializer(serializers.ModelSerializer):

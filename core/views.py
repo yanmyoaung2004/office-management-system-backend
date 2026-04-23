@@ -13,7 +13,7 @@ from django.db.models import Q, Count
 from collections import defaultdict
 from .models import (
     User, Major, Intake,  Enquiry, Semester, IntakeSemester,
-    FollowUpSession, DailyReport, Enrollment, Notification
+    FollowUpSession, Enrollment, Notification
 )
 from .permissions import IsAdminUserRole
 from .serializers import (
@@ -25,8 +25,7 @@ from .serializers import (
     EnquiryListSerializer, EnquiryDetailSerializer, EnquiryCreateSerializer,
     EnquiryUpdateSerializer,
     FollowUpSessionSerializer, FollowUpCreateSerializer, FollowUpUpdateSerializer,
-    ReportListSerializer, ReportDetailSerializer, ReportCreateSerializer,
-    ReportUpdateSerializer, MajorEnrollmentSerializer,
+    MajorEnrollmentSerializer,
     DropoutSerializer, NotificationSerializer,
     EnrollmentListSerializer, EnrollmentSerializer
 )
@@ -675,116 +674,6 @@ class FollowUpDetailView(APIView):
         obj.delete()
         return success_response(message='Follow-up deleted successfully')
 
-# ============ Reports ============
-class ReportListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        qs = DailyReport.objects.select_related('user').all().order_by('-date')
-        if request.query_params.get('userId'):
-            qs = qs.filter(user_id=request.query_params.get('userId'))
-        if request.query_params.get('date'):
-            qs = qs.filter(date=request.query_params.get('date'))
-        search = request.query_params.get('search')
-        if search:
-            qs = qs.filter(activities__icontains=search)
-        return paginate_response(qs, ReportListSerializer, request)
-
-    def post(self, request):
-        serializer = ReportCreateSerializer(data=request.data)
-        if not serializer.is_valid():
-            err = serializer.errors
-            if 'non_field_errors' in err:
-                return error_response(err['non_field_errors'][0], 'BAD_REQUEST', 400)
-            return Response({
-                'success': False,
-                'error': 'Validation failed',
-                'details': err
-            }, status=422)
-        try:
-            obj = serializer.save()
-        except ValidationError as e:
-            return error_response(
-                str(e.detail[0]) if isinstance(e.detail, list) else str(e.detail),
-                'BAD_REQUEST', 400
-            )
-        return success_response({
-            'id': obj.id,
-            'userId': obj.user_id,
-            'date': str(obj.date),
-            'enquiryCount': obj.enquiry_count,
-            'createdAt': obj.created_at.isoformat() + 'Z'
-        }, 'Report submitted successfully', 201)
-
-
-class ReportDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, pk):
-        obj = get_object_or_404(
-            DailyReport.objects.select_related('user').prefetch_related('report_enquiries__enquiry'),
-            pk=pk
-        )
-        serializer = ReportDetailSerializer(obj)
-        return success_response(serializer.data)
-
-    def put(self, request, pk):
-        obj = get_object_or_404(DailyReport, pk=pk)
-        serializer = ReportUpdateSerializer(obj, data=request.data, partial=True)
-        if not serializer.is_valid():
-            return Response({
-                'success': False,
-                'error': 'Validation failed',
-                'details': serializer.errors
-            }, status=422)
-        serializer.save()
-        return success_response(message='Report updated successfully')
-
-    def delete(self, request, pk):
-        obj = get_object_or_404(DailyReport, pk=pk)
-        obj.delete()
-        return success_response(message='Report deleted successfully')
-
-
-class ReportStatsView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        qs = DailyReport.objects.select_related('user')
-        start = request.query_params.get('startDate')
-        end = request.query_params.get('endDate')
-        uid = request.query_params.get('userId')
-        if start:
-            qs = qs.filter(date__gte=start)
-        if end:
-            qs = qs.filter(date__lte=end)
-        if uid:
-            qs = qs.filter(user_id=uid)
-        total = qs.count()
-        days = 1
-        if start and end:
-            from datetime import datetime
-            d1 = datetime.strptime(start, '%Y-%m-%d').date()
-            d2 = datetime.strptime(end, '%Y-%m-%d').date()
-            days = max(1, (d2 - d1).days + 1)
-        user_counts = qs.values('user__full_name').annotate(c=Count('id')).order_by('-c')
-        most_active = user_counts.first()
-        report_enquiries = []
-        for r in qs.prefetch_related('report_enquiries'):
-            for re in r.report_enquiries.all():
-                report_enquiries.append(re.enquiry_id)
-        from collections import Counter
-        most_handled = Counter(report_enquiries).most_common(1)
-        return success_response({
-            'totalReports': total,
-            'averageReportsPerDay': round(total / days, 1) if days else 0,
-            'mostActiveUser': most_active['user__full_name'] if most_active else None,
-            'mostHandledEnquiries': most_handled[0][0] if most_handled else None,
-            'dateRange': {
-                'start': start or '',
-                'end': end or ''
-            }
-        })
 
 # ============ Dropouts ============
 class DropoutListCreateView(APIView):

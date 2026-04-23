@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import (
     User, Major, Intake, Student, Enquiry,
-    FollowUpSession, DailyReport, ReportEnquiry, Dropout, Enrollment, Notification
+    FollowUpSession,  Dropout, Enrollment, Notification
 )
 
 
@@ -54,16 +54,6 @@ class EnquiryAdmin(admin.ModelAdmin):
 class FollowUpSessionAdmin(admin.ModelAdmin):
     list_display = ['id', 'enquiry', 'date', 'handled_by']
 
-
-class ReportEnquiryInline(admin.TabularInline):
-    model = ReportEnquiry
-    extra = 1
-
-
-@admin.register(DailyReport)
-class DailyReportAdmin(admin.ModelAdmin):
-    list_display = ['id', 'user', 'date', 'enquiry_count']
-    inlines = [ReportEnquiryInline]
 
 
 # @admin.register(Dropout)

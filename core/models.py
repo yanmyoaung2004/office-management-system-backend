@@ -4,25 +4,69 @@ from django.db import models
 from .utils import generate_id
 from django.conf import settings
 
-class User(AbstractUser):
-    """Custom user model with role and display name."""
-    ROLE_CHOICES = [('admin', 'admin'), ('staff', 'staff')]
+from django.contrib.auth.models import AbstractUser
+from django.db import models
+
+class BaseIDModel(models.Model):
+    """
+    Abstract base class to provide custom ID logic and timestamps.
+    """
     id = models.CharField(primary_key=True, max_length=20, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    # auto_now=True ensures the database fills this on every save
+    updated_at = models.DateTimeField(auto_now=True) 
+
+    class Meta:
+        abstract = True
+
+class Department(models.Model):
+    """
+    Departments defined in SOPs: 
+    Operations, Finance, Planning & Exam, Admin, Admission, BOD
+    """
+    name = models.CharField(max_length=100, unique=True)
+    code = models.CharField(max_length=10, unique=True) # e.g., 'OPS', 'FIN'
+
+    def __str__(self):
+        return self.name
+
+class User(AbstractUser):
+    # Use the same custom ID logic as your other models
+    id = models.CharField(primary_key=True, max_length=20, editable=False)
+    
+    # Departmental Links
+    department = models.ForeignKey(
+        Department, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='staff'
+    )
+    
+    # Specific Roles across departments
+    ROLE_CHOICES = [
+        ('ADMINISTRATOR', 'Administrator'),
+        ('CONSULTANT', 'Consultant'),
+        ('EXECUTIVE_DIRECTOR', 'Executive Director'),
+        ('COURSE_COORDINATOR', 'Course Coordinator'),
+        ('ACCOUNT_MANAGER', 'Account Manager'),
+        ('CENTRE_MANAGER', 'Centre Manager'),
+        ('OFFICER', 'Officer/Staff'),
+    ]
+    role = models.CharField(max_length=30, choices=ROLE_CHOICES, default='OFFICER')
+    
     full_name = models.CharField(max_length=255)
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='staff')
-    is_superuser = models.BooleanField(default=False)
     email = models.EmailField(unique=True)
-
-    USERNAME_FIELD = 'username'
-    REQUIRED_FIELDS = ['email', 'full_name']
-
-    def save(self, *args, **kwargs):
-        if not self.id:
-            self.id = generate_id('U', User)
-        super().save(*args, **kwargs)
 
     class Meta:
         db_table = 'users'
+
+    def save(self, *args, **kwargs):
+        if not self.id:
+            # Assuming you have your generate_id utility imported
+            from .utils import generate_id
+            self.id = generate_id('U', User)
+        super().save(*args, **kwargs)
 
 class Major(models.Model):
     """Major/Program of study."""
