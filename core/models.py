@@ -75,15 +75,14 @@ class Major(models.Model):
     code = models.CharField(max_length=10, unique=True)
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)  # Add this line
 
     def save(self, *args, **kwargs):
         if not self.id:
+            from .utils import generate_id # Ensure this is available
             self.id = generate_id('MAJ', Major)
         super().save(*args, **kwargs)
-
-    def __str__(self):
-        return self.name
-
+        
 class Year(models.Model):
     """Academic year within a major"""
     TYPE_CHOICES = [

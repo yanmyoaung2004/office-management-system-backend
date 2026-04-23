@@ -65,41 +65,41 @@ class Command(BaseCommand):
             Major.objects.get_or_create(code=code, defaults={'name': name, 'description': desc})
         self.stdout.write(self.style.SUCCESS('Created majors'))
 
-        # 5. Create Sample Intake (SOP: Preparation for New Class)
-        major_cs = Major.objects.get(code='CS')
-        intake, created = Intake.objects.get_or_create(
-            code='2024-CS-JAN',
-            defaults={
-                'major': major_cs,
-                'start_date': date(2024, 1, 15),
-                'capacity': 50,
-                'academic_calendar_received': True,
-                'timetable_received': True,
-                'textbooks_ordered': True
-            }
-        )
-        if created:
-            self.stdout.write(self.style.SUCCESS(f'Created intake {intake.code}'))
+        # # 5. Create Sample Intake (SOP: Preparation for New Class)
+        # major_cs = Major.objects.get(code='CS')
+        # intake, created = Intake.objects.get_or_create(
+        #     code='2024-CS-JAN',
+        #     defaults={
+        #         'major': major_cs,
+        #         'start_date': date(2024, 1, 15),
+        #         'capacity': 50,
+        #         'academic_calendar_received': True,
+        #         'timetable_received': True,
+        #         'textbooks_ordered': True
+        #     }
+        # )
+        # if created:
+        #     self.stdout.write(self.style.SUCCESS(f'Created intake {intake.code}'))
 
-        # 6. Create Sample Student and Enrollment (SOP: Induction)
-        if not Student.objects.filter(email='aungkyaw@example.com').exists():
-            student = Student.objects.create(
-                full_name='Aung Kyaw',
-                nrc='12/ABCDE(N)123456',
-                student_phone_no='+95912345678',
-                parent_name='U Ko Win',
-                parent_phone_no='+95987654321',
-                email='aungkyaw@example.com'
-            )
+        # # 6. Create Sample Student and Enrollment (SOP: Induction)
+        # if not Student.objects.filter(email='aungkyaw@example.com').exists():
+        #     student = Student.objects.create(
+        #         full_name='Aung Kyaw',
+        #         nrc='12/ABCDE(N)123456',
+        #         student_phone_no='+95912345678',
+        #         parent_name='U Ko Win',
+        #         parent_phone_no='+95987654321',
+        #         email='aungkyaw@example.com'
+        #     )
             
-            Enrollment.objects.create(
-                student=student,
-                intake=intake,
-                status='Enrolled',
-                contract_signed=True,
-                id_card_ordered=True,
-                parent_present_at_induction=True
-            )
-            self.stdout.write(self.style.SUCCESS('Created sample student & enrollment'))
+        #     Enrollment.objects.create(
+        #         student=student,
+        #         intake=intake,
+        #         status='Enrolled',
+        #         contract_signed=True,
+        #         id_card_ordered=True,
+        #         parent_present_at_induction=True
+        #     )
+        #     self.stdout.write(self.style.SUCCESS('Created sample student & enrollment'))
 
         self.stdout.write(self.style.SUCCESS('Seed complete!'))
