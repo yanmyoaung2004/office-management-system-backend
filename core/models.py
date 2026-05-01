@@ -4,69 +4,25 @@ from django.db import models
 from .utils import generate_id
 from django.conf import settings
 
-from django.contrib.auth.models import AbstractUser
-from django.db import models
-
-class BaseIDModel(models.Model):
-    """
-    Abstract base class to provide custom ID logic and timestamps.
-    """
-    id = models.CharField(primary_key=True, max_length=20, editable=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    # auto_now=True ensures the database fills this on every save
-    updated_at = models.DateTimeField(auto_now=True) 
-
-    class Meta:
-        abstract = True
-
-class Department(models.Model):
-    """
-    Departments defined in SOPs: 
-    Operations, Finance, Planning & Exam, Admin, Admission, BOD
-    """
-    name = models.CharField(max_length=100, unique=True)
-    code = models.CharField(max_length=10, unique=True) # e.g., 'OPS', 'FIN'
-
-    def __str__(self):
-        return self.name
-
 class User(AbstractUser):
-    # Use the same custom ID logic as your other models
+    """Custom user model with role and display name."""
+    ROLE_CHOICES = [('admin', 'admin'), ('staff', 'staff')]
     id = models.CharField(primary_key=True, max_length=20, editable=False)
-    
-    # Departmental Links
-    department = models.ForeignKey(
-        Department, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True,
-        related_name='staff'
-    )
-    
-    # Specific Roles across departments
-    ROLE_CHOICES = [
-        ('ADMINISTRATOR', 'Administrator'),
-        ('CONSULTANT', 'Consultant'),
-        ('EXECUTIVE_DIRECTOR', 'Executive Director'),
-        ('COURSE_COORDINATOR', 'Course Coordinator'),
-        ('ACCOUNT_MANAGER', 'Account Manager'),
-        ('CENTRE_MANAGER', 'Centre Manager'),
-        ('OFFICER', 'Officer/Staff'),
-    ]
-    role = models.CharField(max_length=30, choices=ROLE_CHOICES, default='OFFICER')
-    
     full_name = models.CharField(max_length=255)
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='staff')
+    is_superuser = models.BooleanField(default=False)
     email = models.EmailField(unique=True)
 
-    class Meta:
-        db_table = 'users'
+    USERNAME_FIELD = 'username'
+    REQUIRED_FIELDS = ['email', 'full_name']
 
     def save(self, *args, **kwargs):
         if not self.id:
-            # Assuming you have your generate_id utility imported
-            from .utils import generate_id
             self.id = generate_id('U', User)
         super().save(*args, **kwargs)
+
+    class Meta:
+        db_table = 'users'
 
 class Major(models.Model):
     """Major/Program of study."""
@@ -75,14 +31,15 @@ class Major(models.Model):
     code = models.CharField(max_length=10, unique=True)
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)  # Add this line
 
     def save(self, *args, **kwargs):
         if not self.id:
-            from .utils import generate_id # Ensure this is available
             self.id = generate_id('MAJ', Major)
         super().save(*args, **kwargs)
-        
+
+    def __str__(self):
+        return self.name
+
 class Year(models.Model):
     """Academic year within a major"""
     TYPE_CHOICES = [
@@ -240,6 +197,43 @@ class FollowUpSession(models.Model):
 
     def __str__(self):
         return f"Follow-up {self.id} for {self.enquiry.student_name}"
+
+class DailyReport(models.Model):
+    """Daily activity report."""
+    id = models.CharField(primary_key=True, max_length=20, editable=False)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='reports'
+    )
+    date = models.DateField()
+    activities = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if not self.id:
+            self.id = generate_id('R', DailyReport)
+        super().save(*args, **kwargs)
+
+    @property
+    def enquiry_count(self):
+        return self.report_enquiries.count()
+
+    def __str__(self):
+        return f"Report {self.id} - {self.user.full_name} - {self.date}"
+
+class ReportEnquiry(models.Model):
+    """Link between report and enquiries handled."""
+    report = models.ForeignKey(
+        DailyReport, on_delete=models.CASCADE, related_name='report_enquiries'
+    )
+    enquiry = models.ForeignKey(
+        Enquiry, on_delete=models.CASCADE, related_name='report_mentions'
+    )
+    action = models.CharField(max_length=255)
+
+    class Meta:
+        unique_together = ['report', 'enquiry']
+        verbose_name_plural = 'Report enquiries'
 
 class Student(models.Model):
     """Core Identity: Data that stays with the person regardless of intake."""

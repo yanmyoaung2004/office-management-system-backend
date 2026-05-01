@@ -67,7 +67,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 #     'DATABASE_PATH',
 #     os.path.join(tempfile.gettempdir(), 'sti_office_db.sqlite3')
 # )
-_db_path = BASE_DIR / 'db.sqlite3'
+_db_path = BASE_DIR / 'db.db'
 
 DATABASES = {
     'default': {

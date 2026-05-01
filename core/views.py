@@ -1,7 +1,6 @@
 """API views for School Office Management System."""
 from django.db import transaction
 from rest_framework.views import APIView
-from rest_framework.serializers import ValidationError
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework import viewsets, status
@@ -98,9 +97,9 @@ class LoginView(APIView):
             'id': user.id,
             'username': user.username,
             'fullName': user.full_name,
-             'email': user.email,
+            'email': user.email,
             'role': user.role,
-             'token': str(refresh.access_token)
+            'token': str(refresh.access_token)
 
         }
         return success_response(data, 'Login successful')
