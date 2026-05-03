@@ -65,6 +65,7 @@ class Role(BaseIDModel):
 class RolePermission(BaseIDModel):
     # role = models.CharField(max_length=20, choices=USER_ROLES)
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='permissions')
+    
     module = models.CharField(max_length=50)  # student, finance, exam, etc.
     action = models.CharField(max_length=20)  # view, create, update, approve
 
@@ -327,6 +328,7 @@ class ReportEnquiry(models.Model):
 class Student(models.Model):
     """Core Identity: Data that stays with the person regardless of intake."""
     id = models.CharField(primary_key=True, max_length=20, editable=False)
+    school_id = models.CharField(max_length=255, unique=True)
     full_name = models.CharField(max_length=255)
     education_level = models.CharField(max_length=100)
     street = models.CharField(max_length=255)

@@ -119,6 +119,7 @@ class Migration(migrations.Migration):
             name='Student',
             fields=[
                 ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
+                ('school_id', models.CharField(max_length=255, unique=True)),
                 ('full_name', models.CharField(max_length=255)),
                 ('education_level', models.CharField(max_length=100)),
                 ('street', models.CharField(max_length=255)),

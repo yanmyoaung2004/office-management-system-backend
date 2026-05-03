@@ -450,6 +450,7 @@ class StudentListSerializer(serializers.ModelSerializer):
     # Data from the related Student model
     studentId = serializers.ReadOnlyField(source='student.id')
     fullName = serializers.CharField(source='student.full_name', read_only=True)
+    schoolId = serializers.CharField(source='student.school_id', read_only=True)
     nrc = serializers.CharField(source='student.nrc', read_only=True)
     gender = serializers.CharField(source='student.gender', read_only=True)
     street = serializers.CharField(source='student.street', read_only=True)
@@ -483,7 +484,7 @@ class StudentListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Enrollment
         fields = [
-            'id', 'studentId', 'fullName', 'nrc', 'birthDate', 'gender', 'email', 
+            'id', 'studentId', 'schoolId', 'fullName', 'nrc', 'birthDate', 'gender', 'email', 
             'studentPhoneNo', 'educationLevel', 'majorName', 'parentName', 
             'parentPhoneNo', 'referralName', 'registrationFee', 'firstInstallmentFee',
             'intakeId', 'intakeCode', 'status', 'scholar', 'currentStatus',
@@ -518,6 +519,7 @@ class StudentDetailSerializer(StudentListSerializer):
 class StudentUpdateSerializer(serializers.ModelSerializer):
     # Student Fields
     fullName = serializers.CharField(source='student.full_name', required=False)
+    schoolId = serializers.CharField(source='student.school_id', read_only=True)
     street = serializers.CharField(source='student.street', required=False)
     city = serializers.CharField(source='student.city', required=False)
     region = serializers.CharField(source='student.region', required=False)
@@ -544,7 +546,7 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Enrollment
         fields = [
-            'fullName', 'email', 'studentPhoneNo', 'parentPhoneNo', 'street', 'city', 'region',
+            'fullName', 'schoolId', 'email', 'studentPhoneNo', 'parentPhoneNo', 'street', 'city', 'region',
             'nrcCopy', 'censusCopy', 'passportPhoto', 'educationCertificate', 'gender',
             'remark', 'scholar', 'educationLevel', 'birthDate', 'nrc', 'parent_name', 'referral_name',
             'registration_fee', 'first_installment_fee', 'intakeId'

@@ -324,29 +324,7 @@ class IntakeListCreateView(APIView):
             qs = qs.filter(major_id=major)
         return paginate_response(qs, IntakeSerializer, request)
     
-    # def post(self, request):
-    #     if not request.user.role == 'admin':
-    #         return error_response('Admin only', 'FORBIDDEN', 403)
-    #     serializer = IntakeCreateSerializer(data=request.data)
-    #     if not serializer.is_valid():
-    #         return Response({
-    #             'success': False,
-    #             'error': 'Validation failed',
-    #             'details': serializer.errors
-    #         }, status=422)
-    #     obj = serializer.save()
-    #     return success_response({
-    #         'id': obj.id,
-    #         'code': obj.code,
-    #         'majorId': obj.major_id,
-    #         'year': obj.year,
-    #         'createdAt': obj.created_at.isoformat() + 'Z'
-    #     }, 'Intake created successfully', 201)
-
     def post(self, request):
-        if request.user.role != 'admin':
-            return error_response('Admin only', 'FORBIDDEN', 403)
-    
         serializer = IntakeCreateSerializer(data=request.data)
 
         if not serializer.is_valid():

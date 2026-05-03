@@ -12,11 +12,13 @@ class Command(BaseCommand):
 
         # Create departments
         departments_data = [
-            ("ADMISSIONS", "Admin Department"),
+            ("DERECTORATE", "Directors Of all Department"), # Replaced Executive            
+            ("ADMISSIONS", "Admissions Department"),
             ("HR", "Human Resources"),
             ("FINANCE", "Finance Department"),
             ("EXAM", "Examination Department"),
             ("PLANNING", "Planning Department"),
+            ("OPERATION", "Operation Department"),
         ]
 
         departments = {}
@@ -31,10 +33,12 @@ class Command(BaseCommand):
 
         # Create RBAC roles
         roles_data = [
-            ("Admin", "admin", "Full system administrator access"),
+            ("Directorate", "Executive-director", "Full access to all system features"),
+            ("Admissions", "admission-staff", "Admissions department access"),
             ("HR Staff", "hr-staff", "Human Resources department limited access"),
             ("Finance Staff", "finance-staff", "Finance department access"),
             ("Exam Staff", "exam-staff", "Examination department access"),
+            ("Operation Staff", "operation-staff", "Operation department access"),
             ("General Staff", "general-staff", "General office staff access"),
         ]
 
@@ -49,7 +53,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f'Created role: {name}'))
 
         # Create RBAC permissions for Admin role
-        admin_role = roles["Admin"]
+        admin_role = roles["Directorate"]
         admin_permissions = [
             # Student management
             ("student", "view"), ("student", "create"), ("student", "update"), ("student", "delete"),
@@ -63,6 +67,8 @@ class Command(BaseCommand):
             ("user", "view"), ("user", "create"), ("user", "update"), ("user", "delete"),
             # Report management
             ("report", "view"), ("report", "create"), ("report", "update"), ("report", "delete"),
+            # Operation management
+            ("operation", "view"), ("operation", "create"), ("operation", "update"), ("operation", "delete"),
         ]
 
         for module, action in admin_permissions:
@@ -78,16 +84,25 @@ class Command(BaseCommand):
         users_data = [
             {
                 'username': 'yma',
-                'password': 'ymanig',
+                'password': 'password',
                 'full_name': 'Yan Myo Aung',
                 'email': 'yma@sti.edu.mm',
-                'role': 'Admin',
-                'department': 'ADMIN',
+                'role': 'Directorate',
+                'department': 'DERECTORATE',
                 'is_superuser': True,
             },
+             {
+                'username': 'admission',
+                'password': 'password',
+                'full_name': 'U Myat Kyaw',
+                'email': 'admission@sti.edu.mm',
+                'role': 'Admissions',
+                'department': 'ADMISSIONS',
+                'is_superuser': False,
+            },
             {
-                'username': 'hr_staff',
-                'password': 'hr123',
+                'username': 'hr',
+                'password': 'password',
                 'full_name': 'U Hla Oo',
                 'email': 'hr@sti.edu.mm',
                 'role': 'HR Staff',
@@ -95,8 +110,8 @@ class Command(BaseCommand):
                 'is_superuser': False,
             },
             {
-                'username': 'finance_staff',
-                'password': 'finance123',
+                'username': 'finance',
+                'password': 'password',
                 'full_name': 'Daw Mya',
                 'email': 'finance@sti.edu.mm',
                 'role': 'Finance Staff',
@@ -104,12 +119,21 @@ class Command(BaseCommand):
                 'is_superuser': False,
             },
             {
-                'username': 'exam_staff',
-                'password': 'exam123',
+                'username': 'exam',
+                'password': 'password',
                 'full_name': 'U Ko Ko',
                 'email': 'exam@sti.edu.mm',
                 'role': 'Exam Staff',
                 'department': 'EXAM',
+                'is_superuser': False,
+            },
+            {
+                'username': 'operation',
+                'password': 'password',
+                'full_name': 'U Ko Ko',
+                'email': 'operation@sti.edu.mm',
+                'role': 'Operation Staff',
+                'department': 'OPERATION',
                 'is_superuser': False,
             },
         ]
@@ -203,10 +227,27 @@ class Command(BaseCommand):
             if created:
                 self.stdout.write(self.style.SUCCESS(f'Created Exam permission: {action} {module}'))
 
+        # Create RBAC permissions for Operation staff
+        operation_role = roles["Operation Staff"]
+        operation_permissions = [
+            ("student", "view"),
+            ("operation", "view"), ("operation", "create"), ("operation", "update"), ("operation", "delete"),
+            ("report", "view"), ("report", "create"),
+        ]
+
+        for module, action in operation_permissions:
+            permission, created = RolePermission.objects.get_or_create(
+                role=operation_role,
+                module=module,
+                action=action
+            )
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'Created Operation permission: {action} {module}'))
+
         self.stdout.write(self.style.SUCCESS('\nSeed complete! RBAC system ready with:'))
-        self.stdout.write('  - 4 departments created')
-        self.stdout.write('  - 4 roles created')
-        self.stdout.write('  - 4 different user types (admin, HR, finance, exam)')
+        self.stdout.write('  - 5 departments created')
+        self.stdout.write('  - 5 roles created')
+        self.stdout.write('  - 5 different user types (admin, HR, finance, exam, operation)')
         self.stdout.write('  - Role-based permissions assigned')
         self.stdout.write('  - 5 majors created')
         self.stdout.write('\nAdmin credentials: yma/ymanig')
