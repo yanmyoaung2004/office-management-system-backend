@@ -26,7 +26,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'core',
-    'django_q',
+    # 'django_q',  # Temporary commented out due to Django 6.x compatibility issues
 ]
 
 MIDDLEWARE = [

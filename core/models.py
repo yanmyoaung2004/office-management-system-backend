@@ -3,15 +3,103 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from .utils import generate_id
 from django.conf import settings
+from django.utils import timezone
+import uuid
+
+DEPARTMENT_NAMES = [
+    ('ADMIN', 'Admin'),
+    ('HR', 'HR'),
+    ('FINANCE', 'Finance'),
+    ('EXAM', 'Exam'),
+    ('PLANNING', 'Planning'),
+]
+
+USER_ROLES = [
+    ('admin', 'Admin'),
+    ('staff', 'Staff'),
+]
+
+
+class BaseIDModel(models.Model):
+    """Abstract base model with custom ID field"""
+    id = models.CharField(
+        max_length=20,
+        primary_key=True,
+        editable=False,
+        unique=True
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        if not self.id:
+            # Generate ID based on model class name
+            prefix = self.__class__.__name__[:2].upper()
+            # This is a simplified version - in production you'd want a more robust ID generation
+            self.id = f"{prefix}-{uuid.uuid4().hex[:6].upper()}"
+        super().save(*args, **kwargs)
+
+
+class Department(BaseIDModel):
+    name = models.CharField(max_length=20, choices=DEPARTMENT_NAMES, unique=True)
+
+    def __str__(self):
+        return self.get_name_display()
+
+    class Meta:
+        verbose_name = "Department"
+        verbose_name_plural = "Departments"
+
+class Role(BaseIDModel):
+    name = models.CharField(max_length=50, unique=True)
+    slug = models.SlugField(max_length=50, unique=True)
+
+    class Meta:
+        verbose_name = "Role"
+        verbose_name_plural = "Roles"
+
+
+class RolePermission(BaseIDModel):
+    # role = models.CharField(max_length=20, choices=USER_ROLES)
+    role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='permissions')
+    module = models.CharField(max_length=50)  # student, finance, exam, etc.
+    action = models.CharField(max_length=20)  # view, create, update, approve
+
+    def __str__(self):
+        return f"{self.get_role_display()} - {self.module} - {self.action}"
+
+    class Meta:
+        verbose_name = "Role Permission"
+        verbose_name_plural = "Role Permissions"
+        unique_together = ('role', 'module', 'action')
+
+
 
 class User(AbstractUser):
     """Custom user model with role and display name."""
-    ROLE_CHOICES = [('admin', 'admin'), ('staff', 'staff')]
     id = models.CharField(primary_key=True, max_length=20, editable=False)
-    full_name = models.CharField(max_length=255)
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='staff')
+    department = models.ForeignKey(Department, on_delete=models.PROTECT, null=True, blank=True)
+    full_name = models.CharField(max_length=255, blank=True, null=True)
+    role = models.ForeignKey(Role, on_delete=models.PROTECT, null=True, related_name='users')
     is_superuser = models.BooleanField(default=False)
     email = models.EmailField(unique=True)
+    groups = models.ManyToManyField(
+        'auth.Group',
+        related_name='custom_user_set',
+        blank=True,
+        help_text='The groups this user belongs to.',
+        verbose_name='groups',
+    )
+    user_permissions = models.ManyToManyField(
+        'auth.Permission',
+        related_name='custom_user_permissions_set',
+        blank=True,
+        help_text='Specific permissions for this user.',
+        verbose_name='user permissions',
+    )
 
     USERNAME_FIELD = 'username'
     REQUIRED_FIELDS = ['email', 'full_name']
@@ -22,7 +110,8 @@ class User(AbstractUser):
         super().save(*args, **kwargs)
 
     class Meta:
-        db_table = 'users'
+        verbose_name = "User"
+        verbose_name_plural = "Users"
 
 class Major(models.Model):
     """Major/Program of study."""

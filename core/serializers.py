@@ -5,7 +5,7 @@ from django.utils.translation import gettext_lazy as _
 from django.contrib.auth import authenticate
 from .models import (
     User, Major, Year, Semester, Intake, Student, Enquiry,
-    FollowUpSession, Dropout, Enrollment, Notification
+    FollowUpSession, Dropout, Enrollment, Notification, Department, Role
 )
 
 
@@ -44,14 +44,39 @@ class LoginSerializer(serializers.Serializer):
         return attrs
 
 # User
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    """
+    Serializer for department model.
+    """
+    class Meta:
+        model = Department
+        fields = ('id', 'name', 'created_at', 'updated_at')
+
+class RoleSerializer(serializers.ModelSerializer):
+    """
+    Serializer for role model.
+    """
+    class Meta:
+        model = Role
+        fields = ('id', 'name', 'slug', 'created_at', 'updated_at')
+
+
 class UserSerializer(serializers.ModelSerializer):
-    fullName = serializers.CharField(source='full_name')
+    """
+    Serializer for user model.
+    """
+    department = DepartmentSerializer(read_only=True)
+    role = RoleSerializer(read_only=True)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'fullName', 'email', 'role', 'is_superuser']
-        read_only_fields = ['id', 'username']
-
+        fields = (
+            'id', 'username', 'email', 'first_name', 
+            'last_name', 'role', 'department', 
+            'is_active', 'date_joined'
+        )
+        read_only_fields = ('id', 'date_joined')
 
 class UserDetailSerializer(serializers.ModelSerializer):
     # Mapping camelCase (Frontend) to snake_case (Backend)

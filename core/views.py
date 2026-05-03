@@ -85,24 +85,23 @@ class LoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        serializer = LoginSerializer(data=request.data, context={'request': request})
-        
-        if not serializer.is_valid():
-            error_details = serializer.errors.get('non_field_errors', ['Invalid credentials'])
-            msg = str(error_details[0])
-            return error_response(msg, 'UNAUTHORIZED', 401)
-        user = serializer.validated_data['user']
-        refresh = RefreshToken.for_user(user)
-        data = {
-            'id': user.id,
-            'username': user.username,
-            'fullName': user.full_name,
-            'email': user.email,
-            'role': user.role,
-            'token': str(refresh.access_token)
+        try:
+            serializer = LoginSerializer(data=request.data, context={'request': request})
+            if not serializer.is_valid():
+                error_msg = next(iter(serializer.errors.values()))[0] 
+                return error_response(error_msg, 'UNAUTHORIZED', status.HTTP_401_UNAUTHORIZED)
+            user = serializer.validated_data['user']
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                'success': True,
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'user': UserSerializer(user).data,
+            }, status=status.HTTP_200_OK)
 
-        }
-        return success_response(data, 'Login successful')
+        except Exception:
+            return error_response("An unexpected error occurred.", "SERVER_ERROR", status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
@@ -120,17 +119,22 @@ class LogoutView(APIView):
 # ============ Token Validation ============
 class CheckTokenView(APIView):
     permission_classes = [IsAuthenticated]
-    # authentication_classes = [JWTAuthentication]
     def post(self, request):
-        return Response({
-            "isValid": True,
-            "user": {
-                "id": request.user.id,
-                "username": request.user.username,
-                "role": getattr(request.user, 'role', 'user')
-            }
-        })    
+        try:
+            serializer = UserSerializer(request.user)            
+            return Response({
+                "success": True,
+                "isValid": True,
+                "user": serializer.data,
+            }, status=status.HTTP_200_OK)
 
+        except Exception as e:
+            return Response({
+                "success": False,
+                "isValid": False,
+                "message": "Could not retrieve user data.",
+                "error": str(e) # Remove str(e) in production for security
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # ============ Users ============
 # @token_required
@@ -262,7 +266,7 @@ class MajorDetailView(APIView):
         return success_response(serializer.data)
 
     def put(self, request, pk):
-        if request.user.role != 'admin':
+        if request.user.role.name != 'Admin':
             return error_response('Admin only', 'FORBIDDEN', 403)
 
         major = get_object_or_404(Major, pk=pk)
