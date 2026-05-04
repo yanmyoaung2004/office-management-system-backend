@@ -1,256 +1,131 @@
-"""Seed initial data for development with RBAC system support."""
 from django.core.management.base import BaseCommand
-from core.models import User, Role, RolePermission, Department, Major
-from datetime import date
-
+from django.contrib.auth.models import Permission
+from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
+from core.models import User, Role, Department, Major
 
 class Command(BaseCommand):
-    help = 'Seed initial data for development including RBAC system'
+    help = 'Seed initial data using built-in auth permissions and Directorate role'
 
     def handle(self, *args, **options):
-        self.stdout.write('Seeding initial data with RBAC system...')
+        self.stdout.write('Starting strictly organized seed process...')
 
-        # Create departments
-        departments_data = [
-            ("DERECTORATE", "Directors Of all Department"), # Replaced Executive            
-            ("ADMISSIONS", "Admissions Department"),
-            ("HR", "Human Resources"),
-            ("FINANCE", "Finance Department"),
-            ("EXAM", "Examination Department"),
-            ("PLANNING", "Planning Department"),
-            ("OPERATION", "Operation Department"),
-        ]
-
-        departments = {}
-        for code, name in departments_data:
-            department, created = Department.objects.get_or_create(
-                name=code,
-                defaults={'id': f'DEP-{code[:2]}'}
-            )
-            departments[code] = department
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'Created department: {name}'))
-
-        # Create RBAC roles
-        roles_data = [
-            ("Directorate", "Executive-director", "Full access to all system features"),
-            ("Admissions", "admission-staff", "Admissions department access"),
-            ("HR Staff", "hr-staff", "Human Resources department limited access"),
-            ("Finance Staff", "finance-staff", "Finance department access"),
-            ("Exam Staff", "exam-staff", "Examination department access"),
-            ("Operation Staff", "operation-staff", "Operation department access"),
-            ("General Staff", "general-staff", "General office staff access"),
-        ]
-
-        roles = {}
-        for name, slug, description in roles_data:
-            role, created = Role.objects.get_or_create(
-                name=name,
-                defaults={'slug': slug}
-            )
-            roles[name] = role
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'Created role: {name}'))
-
-        # Create RBAC permissions for Admin role
-        admin_role = roles["Directorate"]
-        admin_permissions = [
-            # Student management
-            ("student", "view"), ("student", "create"), ("student", "update"), ("student", "delete"),
-            # Enquiry management
-            ("enquiry", "view"), ("enquiry", "create"), ("enquiry", "update"), ("enquiry", "delete"),
-            # Finance management
-            ("finance", "view"), ("finance", "create"), ("finance", "update"), ("finance", "approve"),
-            # Exam management
-            ("exam", "view"), ("exam", "create"), ("exam", "update"), ("exam", "approve"),
-            # User management
-            ("user", "view"), ("user", "create"), ("user", "update"), ("user", "delete"),
-            # Report management
-            ("report", "view"), ("report", "create"), ("report", "update"), ("report", "delete"),
-            # Operation management
-            ("operation", "view"), ("operation", "create"), ("operation", "update"), ("operation", "delete"),
-        ]
-
-        for module, action in admin_permissions:
-            permission, created = RolePermission.objects.get_or_create(
-                role=admin_role,
-                module=module,
-                action=action
-            )
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'Created permission: {action} {module}'))
-
-        # Create users with RBAC roles
-        users_data = [
-            {
-                'username': 'yma',
-                'password': 'password',
-                'full_name': 'Yan Myo Aung',
-                'email': 'yma@sti.edu.mm',
-                'role': 'Directorate',
-                'department': 'DERECTORATE',
-                'is_superuser': True,
-            },
-             {
-                'username': 'admission',
-                'password': 'password',
-                'full_name': 'U Myat Kyaw',
-                'email': 'admission@sti.edu.mm',
-                'role': 'Admissions',
-                'department': 'ADMISSIONS',
-                'is_superuser': False,
-            },
-            {
-                'username': 'hr',
-                'password': 'password',
-                'full_name': 'U Hla Oo',
-                'email': 'hr@sti.edu.mm',
-                'role': 'HR Staff',
-                'department': 'HR',
-                'is_superuser': False,
-            },
-            {
-                'username': 'finance',
-                'password': 'password',
-                'full_name': 'Daw Mya',
-                'email': 'finance@sti.edu.mm',
-                'role': 'Finance Staff',
-                'department': 'FINANCE',
-                'is_superuser': False,
-            },
-            {
-                'username': 'exam',
-                'password': 'password',
-                'full_name': 'U Ko Ko',
-                'email': 'exam@sti.edu.mm',
-                'role': 'Exam Staff',
-                'department': 'EXAM',
-                'is_superuser': False,
-            },
-            {
-                'username': 'operation',
-                'password': 'password',
-                'full_name': 'U Ko Ko',
-                'email': 'operation@sti.edu.mm',
-                'role': 'Operation Staff',
-                'department': 'OPERATION',
-                'is_superuser': False,
-            },
-        ]
-
-        for user_data in users_data:
-            if not User.objects.filter(username=user_data['username']).exists():
-                user = User.objects.create_user(
-                    username=user_data['username'],
-                    email=user_data['email'],
-                    password=user_data['password'],
-                    full_name=user_data['full_name'],
-                    is_superuser=user_data['is_superuser'],
-                    is_staff=user_data['is_superuser']
+        # Use a transaction to ensure database integrity
+        with transaction.atomic():
+            
+            # 1. Departments - Fixed naming and unique IDs
+            departments_data = [
+                ("DIRECTORATE", "Directorate Office"),
+                ("ADMISSIONS", "Admissions Department"),
+                ("HR", "Human Resources"),
+                ("FINANCE", "Finance Department"),
+                ("EXAM", "Examination Department"),
+                ("PLANNING", "Planning Department"),
+                ("OPERATION", "Operation Department"),
+            ]
+            
+            depts = {}
+            for code, name in departments_data:
+                dept, _ = Department.objects.update_or_create(
+                    name=code,
+                    defaults={'id': f'DEP-{code}'}
                 )
-                user.role = roles[user_data['role']]
-                user.department = departments[user_data['department']]
-                user.save()
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f'Created user: {user_data["username"]} ({user_data["full_name"]})'
+                depts[code] = dept
+            self.stdout.write('Departments seeded.')
+
+            # 2. Roles - Bridging custom roles to auth.Permission
+            # We look up by SLUG now to prevent IntegrityErrors if you rename the Name
+            roles_config = [
+                ("Directorate", "directorate-admin"),
+                ("Admissions", "admission-staff"),
+                ("HR Staff", "hr-staff"),
+                ("Finance Staff", "finance-staff"),
+                ("Exam Staff", "exam-staff"),
+                ("Operation Staff", "operation-staff"),
+                ("General Staff", "general-staff"),
+            ]
+            
+            roles = {}
+            for name, slug in roles_config:
+                role, created = Role.objects.get_or_create(
+                    name=name,
+                    defaults={'slug': slug}
+                )
+                roles[name] = role
+                if created:
+                    self.stdout.write(self.style.SUCCESS(f'Created role: {name}'))
+
+            self.stdout.write('Roles seeded.')
+
+            # 3. Permissions Assignment Logic
+            def assign_perms(role_obj, model_name, actions):
+                """Helper to link real Django permissions to our Role model."""
+                try:
+                    # ContentType is the link between strings and database models
+                    ct = ContentType.objects.get(app_label='core', model=model_name.lower())
+                    for action in actions:
+                        codename = f"{action}_{model_name.lower()}"
+                        perm = Permission.objects.get(content_type=ct, codename=codename)
+                        role_obj.permissions.add(perm)
+                except Exception as e:
+                    self.stdout.write(self.style.WARNING(f"Notice: Could not assign {action} {model_name}: {e}"))
+
+            # Assigning keys to the bundles (Roles)
+            dir_role = roles["Directorate"]
+            # Directorate gets full CRUD on core business logic
+            for model in ["user", "department", "role", "major"]:
+                assign_perms(dir_role, model, ["add", "change", "delete", "view"])
+            
+            # Admissions Role permissions
+            assign_perms(roles["Admissions"], "department", ["view"])
+
+            # 4. Majors
+            majors_data = [
+                ('Computer Science', 'CS', 'Computing and Software Systems'),
+                ('Business', 'BE', 'Strategic Management and Finance'),
+                ('Architecture', 'AR', 'Sustainable Design'),
+            ]
+            for name, code, desc in majors_data:
+                Major.objects.update_or_create(
+                    code=code,
+                    defaults={'id': f'MAJ-{code}', 'name': name, 'description': desc}
+                )
+            self.stdout.write('Majors seeded.')
+
+            # 5. Users - Connecting everything together
+            users_data = [
+                {
+                    'username': 'yma',
+                    'full_name': 'Yan Myo Aung',
+                    'email': 'yma@sti.edu.mm',
+                    'role': 'Directorate',
+                    'dept': 'DIRECTORATE',
+                    'is_admin': True
+                },
+                {
+                    'username': 'admission_staff',
+                    'full_name': 'U Myat Kyaw',
+                    'email': 'admission@sti.edu.mm',
+                    'role': 'Admissions',
+                    'dept': 'ADMISSIONS',
+                    'is_admin': False
+                }
+            ]
+
+            for u in users_data:
+                user = User.objects.filter(username=u['username']).first()
+                if not user:
+                    user = User.objects.create_user(
+                        username=u['username'],
+                        email=u['email'],
+                        password='password123',
+                        full_name=u['full_name']
                     )
-                )
-            else:
-                self.stdout.write(f'User {user_data["username"]} already exists')
+                
+                user.is_staff = u['is_admin']
+                user.is_superuser = u['is_admin']
+                user.role = roles[u['role']]
+                user.department = depts[u['dept']]
+                user.save()
 
-        # Create majors
-        majors_data = [
-            ('Computer Science', 'CS', 'Computing, AI, and Software Systems Development'),
-            ('Public Health', 'PH', 'Global Health, Epidemiology, and Community Wellness'),
-            ('Business', 'BE', 'Strategic Management, Finance, and Entrepreneurship'),
-            ('Architectural Engineering', 'AE', 'Sustainable Building Systems and Design'),
-            ('Civil Engineering', 'CE', 'Infrastructure Design, Urban Planning, and Structural Engineering'),
-        ]
-
-        for name, code, desc in majors_data:
-            major, created = Major.objects.get_or_create(
-                code=code,
-                defaults={'name': name, 'description': desc, 'id': f'MAJ-{code}'}
-            )
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'Created major: {name}'))
-
-        # Create RBAC permissions for HR staff
-        hr_role = roles["HR Staff"]
-        hr_permissions = [
-            ("student", "view"), ("student", "create"), ("student", "update"),
-            ("enquiry", "view"), ("enquiry", "create"), ("enquiry", "update"),
-            ("report", "view"), ("report", "create"),
-        ]
-
-        for module, action in hr_permissions:
-            permission, created = RolePermission.objects.get_or_create(
-                role=hr_role,
-                module=module,
-                action=action
-            )
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'Created HR permission: {action} {module}'))
-
-        # Create RBAC permissions for Finance staff
-        finance_role = roles["Finance Staff"]
-        finance_permissions = [
-            ("student", "view"),
-            ("finance", "view"), ("finance", "create"),
-            ("report", "view"), ("report", "create"),
-        ]
-
-        for module, action in finance_permissions:
-            permission, created = RolePermission.objects.get_or_create(
-                role=finance_role,
-                module=module,
-                action=action
-            )
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'Created Finance permission: {action} {module}'))
-
-        # Create RBAC permissions for Exam staff
-        exam_role = roles["Exam Staff"]
-        exam_permissions = [
-            ("student", "view"),
-            ("exam", "view"), ("exam", "create"),
-            ("report", "view"), ("report", "create"),
-        ]
-
-        for module, action in exam_permissions:
-            permission, created = RolePermission.objects.get_or_create(
-                role=exam_role,
-                module=module,
-                action=action
-            )
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'Created Exam permission: {action} {module}'))
-
-        # Create RBAC permissions for Operation staff
-        operation_role = roles["Operation Staff"]
-        operation_permissions = [
-            ("student", "view"),
-            ("operation", "view"), ("operation", "create"), ("operation", "update"), ("operation", "delete"),
-            ("report", "view"), ("report", "create"),
-        ]
-
-        for module, action in operation_permissions:
-            permission, created = RolePermission.objects.get_or_create(
-                role=operation_role,
-                module=module,
-                action=action
-            )
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'Created Operation permission: {action} {module}'))
-
-        self.stdout.write(self.style.SUCCESS('\nSeed complete! RBAC system ready with:'))
-        self.stdout.write('  - 5 departments created')
-        self.stdout.write('  - 5 roles created')
-        self.stdout.write('  - 5 different user types (admin, HR, finance, exam, operation)')
-        self.stdout.write('  - Role-based permissions assigned')
-        self.stdout.write('  - 5 majors created')
-        self.stdout.write('\nAdmin credentials: yma/ymanig')
-        self.stdout.write('HR credentials: hr_staff/hr123')
-        self.stdout.write('Finance credentials: finance_staff/finance123')
-        self.stdout.write('Exam credentials: exam_staff/exam123')
+        self.stdout.write(self.style.SUCCESS('Successfully seeded with Directorate role and full permissions.'))

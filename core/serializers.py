@@ -4,7 +4,7 @@ from django.db import transaction
 from django.utils.translation import gettext_lazy as _
 from django.contrib.auth import authenticate
 from .models import (
-    User, Major, Year, Semester, Intake, Student, Enquiry,
+    User, Major, Year, Semester, Intake, Student, Enquiry, Subject,
     FollowUpSession, Dropout, Enrollment, Notification, Department, Role
 )
 
@@ -136,6 +136,21 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
 
 # Major, Year and Semester
+
+class SubjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Subject
+        fields = ['id', 'name', 'code']
+
+class SemesterDetailSerializer(serializers.ModelSerializer):
+    # Performance: This will trigger multiple queries unless you use .prefetch_related()
+    subjects = SubjectSerializer(many=True, read_only=True)
+    yearName = serializers.CharField(source='year.name', read_only=True)
+
+    class Meta:
+        model = Semester
+        fields = ['id', 'yearName', 'semester_number', 'name', 'subjects']
+
 class SemesterSerializer(serializers.ModelSerializer):
     semesterNumber = serializers.IntegerField(source='semester_number', allow_null=True, required=False)
     id = serializers.CharField(required=False) # Important for updates
@@ -516,10 +531,30 @@ class StudentDetailSerializer(StudentListSerializer):
     class Meta(StudentListSerializer.Meta):
         fields = StudentListSerializer.Meta.fields + ['updatedAt']
 
+class SchoolIdUpdateSerializer(serializers.ModelSerializer):
+    # Mapping schoolId from the request to student.school_id in the model
+    schoolId = serializers.CharField(source='student.school_id')
+
+    class Meta:
+        model = Enrollment
+        fields = ['schoolId']
+
+    def update(self, instance, validated_data):
+        student_data = validated_data.pop('student', {})
+        new_school_id = student_data.get('school_id')
+        
+        if new_school_id:
+            student = instance.student
+            student.school_id = new_school_id
+            student.save()
+            
+        return instance
+
 class StudentUpdateSerializer(serializers.ModelSerializer):
     # Student Fields
     fullName = serializers.CharField(source='student.full_name', required=False)
     schoolId = serializers.CharField(source='student.school_id', read_only=True)
+    profileImage = serializers.ImageField(source='profile_image', required=False, allow_null=True)
     street = serializers.CharField(source='student.street', required=False)
     city = serializers.CharField(source='student.city', required=False)
     region = serializers.CharField(source='student.region', required=False)
@@ -546,7 +581,7 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Enrollment
         fields = [
-            'fullName', 'schoolId', 'email', 'studentPhoneNo', 'parentPhoneNo', 'street', 'city', 'region',
+            'fullName', 'schoolId', 'profileImage', 'email', 'studentPhoneNo', 'parentPhoneNo', 'street', 'city', 'region',
             'nrcCopy', 'censusCopy', 'passportPhoto', 'educationCertificate', 'gender',
             'remark', 'scholar', 'educationLevel', 'birthDate', 'nrc', 'parent_name', 'referral_name',
             'registration_fee', 'first_installment_fee', 'intakeId'

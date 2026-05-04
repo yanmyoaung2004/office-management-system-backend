@@ -1,5 +1,7 @@
 """API URL configuration."""
 from django.urls import path
+from django.conf import settings
+from django.conf.urls.static import static
 from . import views
 
 urlpatterns = [
@@ -26,6 +28,8 @@ urlpatterns = [
     # # Students
     path('students', views.StudentListCreateView.as_view()),
     path('students/<str:pk>', views.StudentDetailView.as_view()),
+    path('students/<str:pk>/update-school-id', views.UpdateSchoolIdView.as_view()),  
+    
 
     # # Enquiries
     path('enquiries', views.EnquiryListCreateView.as_view()),
@@ -54,4 +58,4 @@ urlpatterns = [
 
     path('chart-data', views.DashboardSummaryView.as_view(), name='chart-data'),
     path('filter-data', views.FilterDataView.as_view(), name='filter-data'),
-]
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

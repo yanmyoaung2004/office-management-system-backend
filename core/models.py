@@ -4,6 +4,7 @@ from django.db import models
 from .utils import generate_id
 from django.conf import settings
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 import uuid
 
 DEPARTMENT_NAMES = [
@@ -56,28 +57,11 @@ class Department(BaseIDModel):
 class Role(BaseIDModel):
     name = models.CharField(max_length=50, unique=True)
     slug = models.SlugField(max_length=50, unique=True)
+    permissions = models.ManyToManyField('auth.Permission', blank=True)
 
     class Meta:
         verbose_name = "Role"
         verbose_name_plural = "Roles"
-
-
-class RolePermission(BaseIDModel):
-    # role = models.CharField(max_length=20, choices=USER_ROLES)
-    role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='permissions')
-    
-    module = models.CharField(max_length=50)  # student, finance, exam, etc.
-    action = models.CharField(max_length=20)  # view, create, update, approve
-
-    def __str__(self):
-        return f"{self.get_role_display()} - {self.module} - {self.action}"
-
-    class Meta:
-        verbose_name = "Role Permission"
-        verbose_name_plural = "Role Permissions"
-        unique_together = ('role', 'module', 'action')
-
-
 
 class User(AbstractUser):
     """Custom user model with role and display name."""
@@ -155,27 +139,66 @@ class Year(models.Model):
     def __str__(self):
         return f"{self.major.code} - {self.name}"
 
-class Semester(models.Model):
-    """Semester within a year"""
-    id = models.CharField(primary_key=True, max_length=20, editable=False)
+
+
+class Subject(BaseIDModel):
+    """
+    Core Subject definition. 
+    Independent of when or where it is taught.
+    """
+    name = models.CharField(max_length=255)
+    code = models.CharField(max_length=20, unique=True) # Unique globally is safer than unique_together=('code',)
+    description = models.TextField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['code']
+
+    def __str__(self):
+        return f"[{self.code}] {self.name}"
+
+
+class Semester(BaseIDModel):
+    """Semester linked to a specific academic Year."""
     year = models.ForeignKey(
-        Year, on_delete=models.CASCADE, related_name='semesters'
+        'Year', on_delete=models.CASCADE, related_name='semesters'
     )
-    semester_number = models.PositiveSmallIntegerField(null=True, blank=True)
-    name = models.CharField(max_length=50)  # Fall, Spring, Summer
-    created_at = models.DateTimeField(auto_now_add=True)
+    semester_number = models.PositiveSmallIntegerField()
+    name = models.CharField(max_length=50)  # e.g., Fall, Spring
+    
+    # Many-to-Many relationship through the junction model
+    subjects = models.ManyToManyField(
+        Subject, 
+        through='SemesterSubject', 
+        related_name='semesters'
+    )
 
     class Meta:
         unique_together = ('year', 'semester_number')
-        ordering = ['semester_number']
-
-    def save(self, *args, **kwargs):
-        if not self.id:
-            self.id = generate_id('SEM', Semester)
-        super().save(*args, **kwargs)
+        ordering = ['year', 'semester_number']
 
     def __str__(self):
-        return f"{self.year.name} - {self.name}"
+        return f"{self.year.name} - {self.name} (Sem {self.semester_number})"
+
+
+class SemesterSubject(BaseIDModel):
+    """
+    Junction table mapping Subjects to Semesters.
+    Allows for semester-specific details like teacher or room.
+    """
+    semester = models.ForeignKey(
+        Semester, on_delete=models.CASCADE, related_name='semester_subject_links'
+    )
+    subject = models.ForeignKey(
+        Subject, on_delete=models.CASCADE, related_name='semester_links'
+    )
+    # Performance optimization: ensure no duplicate subjects in one semester
+    class Meta:
+        unique_together = ('semester', 'subject')
+
+    def __str__(self):
+        return f"{self.semester} | {self.subject.name}"
+
+
 
 class Intake(models.Model):
     """Intake/batch for a major."""
@@ -325,10 +348,27 @@ class ReportEnquiry(models.Model):
         unique_together = ['report', 'enquiry']
         verbose_name_plural = 'Report enquiries'
 
+def student_image_path(instance, filename):
+    # Extension extraction
+    ext = filename.split('.')[-1]
+    # Path: media/students/<school_id>/profile.<ext>
+    return f'students/{instance.school_id}/profile.{ext}'
+
+def validate_file_size(value):
+    filesize = value.size
+    if filesize > 2 * 1024 * 1024:  # 2MB Limit
+        raise ValidationError("Maximum file size is 2MB")
+    
 class Student(models.Model):
     """Core Identity: Data that stays with the person regardless of intake."""
     id = models.CharField(primary_key=True, max_length=20, editable=False)
     school_id = models.CharField(max_length=255, unique=True)
+    profile_image = models.ImageField(
+        upload_to=student_image_path, 
+        validators=[validate_file_size],
+        null=True, 
+        blank=True
+    )
     full_name = models.CharField(max_length=255)
     education_level = models.CharField(max_length=100)
     street = models.CharField(max_length=255)

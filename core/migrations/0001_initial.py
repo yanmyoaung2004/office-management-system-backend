@@ -8,6 +8,16 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def student_image_path(instance, filename):
+    ext = filename.split('.')[-1]
+    return f'students/{instance.school_id}/profile.{ext}'
+
+def validate_file_size(value):
+    filesize = value.size
+    if filesize > 2 * 1024 * 1024:  # 2MB Limit
+        from django.core.exceptions import ValidationError
+        raise ValidationError("Maximum file size is 2MB")
+    
 class Migration(migrations.Migration):
 
     initial = True
@@ -97,11 +107,21 @@ class Migration(migrations.Migration):
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('name', models.CharField(max_length=50, unique=True)),
                 ('slug', models.SlugField(unique=True)),
+                ('permissions', models.ManyToManyField(blank=True, to='auth.Permission')),
             ],
             options={
                 'verbose_name': 'Role',
                 'verbose_name_plural': 'Roles',
             },
+        ),
+        migrations.CreateModel(
+            name='SemesterSubject',
+            fields=[
+                ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
+                ('semester', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='app.semester')),
+                ('subject', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='app.subject')),
+            ],
+            options={'unique_together': {('semester', 'subject')}},
         ),
         migrations.CreateModel(
             name='Semester',
@@ -120,6 +140,12 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
                 ('school_id', models.CharField(max_length=255, unique=True)),
+                ('profile_image', models.ImageField(
+                    blank=True, 
+                    null=True, 
+                    upload_to=student_image_path,
+                    validators=[validate_file_size]
+                )),
                 ('full_name', models.CharField(max_length=255)),
                 ('education_level', models.CharField(max_length=100)),
                 ('street', models.CharField(max_length=255)),
@@ -270,22 +296,22 @@ class Migration(migrations.Migration):
                 'unique_together': {('report', 'enquiry')},
             },
         ),
-        migrations.CreateModel(
-            name='RolePermission',
-            fields=[
-                ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False, unique=True)),
-                ('created_at', models.DateTimeField(default=django.utils.timezone.now)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('module', models.CharField(max_length=50)),
-                ('action', models.CharField(max_length=20)),
-                ('role', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='permissions', to='core.role')),
-            ],
-            options={
-                'verbose_name': 'Role Permission',
-                'verbose_name_plural': 'Role Permissions',
-                'unique_together': {('role', 'module', 'action')},
-            },
-        ),
+        # migrations.CreateModel(
+        #     name='RolePermission',
+        #     fields=[
+        #         ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False, unique=True)),
+        #         ('created_at', models.DateTimeField(default=django.utils.timezone.now)),
+        #         ('updated_at', models.DateTimeField(auto_now=True)),
+        #         ('module', models.CharField(max_length=50)),
+        #         ('action', models.CharField(max_length=20)),
+        #         ('role', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='permissions', to='core.role')),
+        #     ],
+        #     options={
+        #         'verbose_name': 'Role Permission',
+        #         'verbose_name_plural': 'Role Permissions',
+        #         'unique_together': {('role', 'module', 'action')},
+        #     },
+        # ),
         migrations.CreateModel(
             name='IntakeSemester',
             fields=[

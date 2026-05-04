@@ -7,9 +7,11 @@ from rest_framework import viewsets, status
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated, AllowAny #IsAdminUser
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.utils.decorators import method_decorator
 from django.shortcuts import get_object_or_404
 from django.db.models import Q, Count
 from collections import defaultdict
+from .decorators import role_required
 from .models import (
     User, Major, Intake,  Enquiry, Semester, IntakeSemester,
     FollowUpSession, Enrollment, Notification
@@ -17,7 +19,7 @@ from .models import (
 from .permissions import IsAdminUserRole
 from .serializers import (
     LoginSerializer, UserSerializer, UserDetailSerializer, UserCreateSerializer,
-    MajorDetailSerializer,
+    MajorDetailSerializer, SchoolIdUpdateSerializer,
     IntakeSerializer, IntakeCreateSerializer,
       StudentCreateSerializer, StudentListSerializer
       ,StudentUpdateSerializer,StudentDetailSerializer,
@@ -393,6 +395,26 @@ class IntakeDetailView(APIView):
 
 # ============ Students ============
 
+class UpdateSchoolIdView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        # I am assuming 'pk' is the Enrollment ID based on your previous code
+        enrollment = get_object_or_404(Enrollment.objects.select_related('student'), pk=pk)
+        
+        serializer = SchoolIdUpdateSerializer(enrollment, data=request.data, partial=True)
+        
+        if serializer.is_valid():
+            serializer.save()
+            return success_response({
+                'schoolId': enrollment.student.school_id
+            }, 'School ID updated successfully')
+            
+        return Response({
+            'success': False,
+            'errors': serializer.errors
+        }, status=400)
+
 class StudentDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -436,6 +458,8 @@ class StudentDetailView(APIView):
 
 class StudentListCreateView(APIView):
     permission_classes = [IsAuthenticated]
+    
+    @method_decorator(role_required('view_student'))
     def get(self, request):
         qs = Enrollment.objects.select_related(
             'student', 
@@ -506,6 +530,7 @@ class StudentListCreateView(APIView):
         final_list = list(grouped_data.values())
         return paginate_response(final_list, None, request)
     
+    @method_decorator(role_required('add_student'))
     def post(self, request):
         serializer = StudentCreateSerializer(data=request.data)
         if not serializer.is_valid():
