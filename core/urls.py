@@ -39,10 +39,6 @@ urlpatterns = [
     # # Follow-ups
     path('followups/<str:pk>', views.FollowUpDetailView.as_view()),
 
-    # # Reports
-    # path('reports', views.ReportListCreateView.as_view()),
-    # path('reports/stats', views.ReportStatsView.as_view()),
-    # path('reports/<str:pk>', views.ReportDetailView.as_view()),
 
     # # Dropouts
     path('dropouts', views.DropoutListCreateView.as_view()),
@@ -58,4 +54,10 @@ urlpatterns = [
 
     path('chart-data', views.DashboardSummaryView.as_view(), name='chart-data'),
     path('filter-data', views.FilterDataView.as_view(), name='filter-data'),
+
+    # # Reports
+    # path('reports', views.ReportListCreateView.as_view()),
+    # path('reports/stats', views.ReportStatsView.as_view()),
+    # path('reports/<str:pk>', views.ReportDetailView.as_view()),
+    
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -114,27 +114,71 @@ class Migration(migrations.Migration):
                 'verbose_name_plural': 'Roles',
             },
         ),
+        
+        # 1. Create the Subject model first
         migrations.CreateModel(
-            name='SemesterSubject',
+            name='Subject',
             fields=[
                 ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
-                ('semester', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='app.semester')),
-                ('subject', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='app.subject')),
+                ('name', models.CharField(max_length=255)),
+                ('code', models.CharField(max_length=20, unique=True)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
             ],
-            options={'unique_together': {('semester', 'subject')}},
+            options={
+                'ordering': ['code'],
+            },
         ),
+        migrations.CreateModel(
+            name='Year',
+            fields=[
+                ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
+                ('name', models.CharField(max_length=255)),
+                ('yearNumber', models.IntegerField(blank=True, null=True)),
+                ('type', models.CharField(choices=[('FOUNDATION', 'Foundation'), ('NORMAL', 'Normal')], default='NORMAL', max_length=20)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('major', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='years', to='core.major')),
+            ],
+            options={
+                'ordering': ['yearNumber'],
+                'unique_together': {('major', 'yearNumber')},
+            },
+        ),
+
+        # 2. Create the Semester model
         migrations.CreateModel(
             name='Semester',
             fields=[
                 ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
-                ('semester_number', models.PositiveSmallIntegerField(blank=True, null=True)),
+                ('semester_number', models.PositiveSmallIntegerField()),
                 ('name', models.CharField(max_length=50)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('year', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='semesters', to='core.year')),
             ],
             options={
                 'ordering': ['semester_number'],
+                'unique_together': {('year', 'semester_number')},
             },
         ),
+
+        # 3. Create the Junction table (SemesterSubject)
+        migrations.CreateModel(
+            name='SemesterSubject',
+            fields=[
+                ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
+                ('semester', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.semester')),
+                ('subject', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.subject')),
+            ],
+            options={
+                'unique_together': {('semester', 'subject')},
+            },
+        ),
+        # 4. Add the ManyToMany relationship to Semester using the 'through' table
+        migrations.AddField(
+            model_name='semester',
+            name='subjects',
+            field=models.ManyToManyField(related_name='semesters', through='core.SemesterSubject', to='core.Subject'),
+        ),
+
         migrations.CreateModel(
             name='Student',
             fields=[
@@ -262,27 +306,7 @@ class Migration(migrations.Migration):
             model_name='enrollment',
             name='student',
             field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='enrollments', to='core.student'),
-        ),
-        migrations.CreateModel(
-            name='Year',
-            fields=[
-                ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=255)),
-                ('yearNumber', models.IntegerField(blank=True, null=True)),
-                ('type', models.CharField(choices=[('FOUNDATION', 'Foundation'), ('NORMAL', 'Normal')], default='NORMAL', max_length=20)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('major', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='years', to='core.major')),
-            ],
-            options={
-                'ordering': ['yearNumber'],
-                'unique_together': {('major', 'yearNumber')},
-            },
-        ),
-        migrations.AddField(
-            model_name='semester',
-            name='year',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='semesters', to='core.year'),
-        ),
+        ),    
         migrations.CreateModel(
             name='ReportEnquiry',
             fields=[

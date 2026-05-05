@@ -73,11 +73,18 @@ class Command(BaseCommand):
             # Assigning keys to the bundles (Roles)
             dir_role = roles["Directorate"]
             # Directorate gets full CRUD on core business logic
-            for model in ["user", "department", "role", "major"]:
+            for model in ["user", "department", "role", "major", "student", "enrollment", "dropout", "enquiry", "intake"]:
                 assign_perms(dir_role, model, ["add", "change", "delete", "view"])
-            
+
             # Admissions Role permissions
-            assign_perms(roles["Admissions"], "department", ["view"])
+            for model in ["student", "enrollment", "dropout", "enquiry", "major"]:
+                assign_perms(roles["Admissions"], model, ["add", "change", "delete", "view"])
+            
+            # Exam Role permissions
+            for model in ["intake"]:
+                assign_perms(roles["Exam Staff"], model, ["add", "change", "delete", "view"])
+            
+            # assign_perms(, "department", ["view"])Exam Staff
 
             # 4. Majors
             majors_data = [

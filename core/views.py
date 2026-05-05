@@ -141,17 +141,17 @@ class CheckTokenView(APIView):
 # ============ Users ============
 # @token_required
 class UserListCreateView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    permission_classes = [IsAuthenticated]
 
+    @method_decorator(role_required('view_user'))
     def get(self, request):
-        if not request.user.role == 'admin':
-            return error_response('Admin only', 'FORBIDDEN', 403)
         qs = User.objects.all().order_by('id')
         role = request.query_params.get('role')
         if role:
             qs = qs.filter(role=role)
         return paginate_response(qs, UserSerializer, request)
 
+    @method_decorator(role_required('add_user'))
     def post(self, request):
         if request.user.role not in ['admin', 'super_admin']:
             return error_response('Admin only', 'FORBIDDEN', 403)
