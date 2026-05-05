@@ -152,6 +152,7 @@ class Migration(migrations.Migration):
                 ('semester_number', models.PositiveSmallIntegerField()),
                 ('name', models.CharField(max_length=50)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now_add=True)),
                 ('year', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='semesters', to='core.year')),
             ],
             options={
@@ -183,7 +184,7 @@ class Migration(migrations.Migration):
             name='Student',
             fields=[
                 ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
-                ('school_id', models.CharField(max_length=255, unique=True)),
+                ('school_id', models.CharField(max_length=255, unique=True, blank=True, null=True)),
                 ('profile_image', models.ImageField(
                     blank=True, 
                     null=True, 

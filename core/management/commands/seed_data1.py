@@ -80,8 +80,8 @@ class Command(BaseCommand):
             for model in ["student", "enrollment", "dropout", "enquiry", "major"]:
                 assign_perms(roles["Admissions"], model, ["add", "change", "delete", "view"])
             assign_perms(roles["Admissions"], "intake", ["view"])
-            assign_perms(roles["Finance Staff"], "student", ["view"]) #72 44 72
-            assign_perms(roles["Finance Staff"], "intake", ["view"]) 
+            assign_perms(roles["Finance Staff"], "student", ["view"])
+
             
             # Exam Role permissions
             for model in ["intake"]:
