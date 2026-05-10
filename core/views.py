@@ -110,15 +110,8 @@ class UserListCreateView(APIView):
                     'FORBIDDEN', 
                     403
                 )
-        user = serializer.save()
-        return success_response({
-            'id': user.id,
-            'username': user.username,
-            'fullName': user.full_name,
-            'email': user.email,
-            'role': user.role,
-            'createdAt': user.date_joined.isoformat() + 'Z'
-        }, 'User created successfully', 201)
+        serializer.save()
+        return success_response('User created successfully', 201)
 
 
 class UserDetailView(APIView):

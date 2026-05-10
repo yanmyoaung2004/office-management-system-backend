@@ -23,5 +23,6 @@ urlpatterns = [
 
     path('finance/', include('core.api.finance.urls')),
     path('admission/', include('core.api.admission.urls')),
+    path('exam/', include('core.api.exam.urls')),
     
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

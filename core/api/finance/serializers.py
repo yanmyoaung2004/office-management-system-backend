@@ -1,5 +1,3 @@
-
-
 """Serializers for School Office Management API."""
 from rest_framework import serializers
 from core.models import Enrollment, Major, Intake, Semester
@@ -8,6 +6,8 @@ from core.models import Enrollment, Major, Intake, Semester
 class IntakeSemesterScheduleSerializer(serializers.Serializer):
     id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     semester_id = serializers.CharField(max_length=20)
+    semester_name = serializers.CharField(source='semester.name', read_only=True)
+    year = serializers.CharField(source='semester.year.name', read_only=True)
     start_date = serializers.DateField()
     end_date = serializers.DateField()
     def validate(self, data):
@@ -27,29 +27,22 @@ class StudentListSerializer(serializers.ModelSerializer):
     schoolId = serializers.CharField(source='student.school_id', read_only=True)
     studentPhoneNo = serializers.CharField(source='student.student_phone_no', read_only=True)
     parentPhoneNo = serializers.CharField(source='student.parent_phone_no', read_only=True)
-    # Data from the related Intake model
-    intakeId = serializers.ReadOnlyField(source='intake.id')
-    intakeCode = serializers.CharField(source='intake.code', read_only=True)
-    majorName = serializers.CharField(source='intake.major.name', read_only=True)
-    # Data directly on the Enrollment model (Local fields)
+    isPaid = serializers.SerializerMethodField()
     currentStatus = serializers.SerializerMethodField()
 
     class Meta:
         model = Enrollment
         fields = [
-            'id', 'studentId', 'schoolId', 'fullName',
-            'studentPhoneNo', 'majorName', 
-            'parentPhoneNo','intakeId', 'intakeCode', 'currentStatus',
+            'id', 'studentId', 'schoolId', 'fullName', 'isPaid',
+            'studentPhoneNo', 'parentPhoneNo', 'currentStatus',
         ]
     
-    def get_dropout(self, obj):
-        if hasattr(obj, 'dropout_record'):
-            return {
-                "intakeId": obj.intake.id,
-                "reason": obj.dropout_record.reason,
-                "remark": obj.dropout_record.remark
-            }
-        return None
+    def get_isPaid(self, obj):
+        current_sem = obj.intake.current_semester if obj.intake else None
+        if not current_sem:
+            return False
+        fee = next((f for f in obj.semester_fees.all() if f.semester_id == current_sem.id), None)        
+        return fee.is_paid if fee else False
 
     def get_currentStatus(self, obj):
         """Combines Year and Semester from the Intake related to this Enrollment."""

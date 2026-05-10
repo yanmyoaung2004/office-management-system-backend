@@ -5,6 +5,7 @@ from .utils import generate_id
 from django.conf import settings
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 import uuid
 
 DEPARTMENT_NAMES = [
@@ -42,7 +43,6 @@ class BaseIDModel(models.Model):
             # This is a simplified version - in production you'd want a more robust ID generation
             self.id = f"{prefix}-{uuid.uuid4().hex[:6].upper()}"
         super().save(*args, **kwargs)
-
 
 class Department(BaseIDModel):
     name = models.CharField(max_length=20, choices=DEPARTMENT_NAMES, unique=True)
@@ -139,8 +139,6 @@ class Year(models.Model):
     def __str__(self):
         return f"{self.major.code} - {self.name}"
 
-
-
 class Subject(BaseIDModel):
     """
     Core Subject definition. 
@@ -156,7 +154,6 @@ class Subject(BaseIDModel):
     def __str__(self):
         return f"[{self.code}] {self.name}"
 
-
 class Semester(BaseIDModel):
     """Semester linked to a specific academic Year."""
     year = models.ForeignKey(
@@ -164,7 +161,6 @@ class Semester(BaseIDModel):
     )
     semester_number = models.PositiveSmallIntegerField()
     name = models.CharField(max_length=50)  # e.g., Fall, Spring
-    
     # Many-to-Many relationship through the junction model
     subjects = models.ManyToManyField(
         Subject, 
@@ -178,7 +174,6 @@ class Semester(BaseIDModel):
 
     def __str__(self):
         return f"{self.year.name} - {self.name} (Sem {self.semester_number})"
-
 
 class SemesterSubject(BaseIDModel):
     """
@@ -197,8 +192,6 @@ class SemesterSubject(BaseIDModel):
 
     def __str__(self):
         return f"{self.semester} | {self.subject.name}"
-
-
 
 class Intake(models.Model):
     """Intake/batch for a major."""
@@ -362,7 +355,7 @@ def validate_file_size(value):
 class Student(models.Model):
     """Core Identity: Data that stays with the person regardless of intake."""
     id = models.CharField(primary_key=True, max_length=20, editable=False)
-    school_id = models.CharField(max_length=255, unique=True)
+    school_id = models.CharField(max_length=255, unique=True, null=True, blank=True)
     profile_image = models.ImageField(
         upload_to=student_image_path, 
         validators=[validate_file_size],
@@ -423,6 +416,22 @@ class Enrollment(models.Model):
     def __str__(self):
         return f"{self.student.full_name} - {self.intake.name}"
 
+class SchoolFee(BaseIDModel):
+    semester = models.ForeignKey(
+        Semester, 
+        on_delete=models.CASCADE, 
+        related_name='school_fees'
+    )
+    enrollment = models.ForeignKey(
+        'Enrollment', 
+        on_delete=models.CASCADE, 
+        related_name='semester_fees'
+    )
+    is_paid = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ('enrollment', 'semester')
+
 class Dropout(models.Model):
 
     """Event Record: Linked to a specific Enrollment, not just the student."""
@@ -479,3 +488,74 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.title} - {self.created_at.strftime('%Y-%m-%d')}"
+    
+class Exam(BaseIDModel):
+    title = models.CharField(max_length=200) 
+    intake = models.ForeignKey(Intake, on_delete=models.CASCADE)
+    semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
+    date_started = models.DateField()
+
+class ExamPaper(BaseIDModel):
+    # This handles "In each exam there are many subjects"
+    class ExamType(models.TextChoices):
+        ASSIGNMENT = 'ASSIGNMENT', 'Assignment'
+        PRESENTATION = 'PRESENTATION', 'Presentation'
+        ONPAPER = 'ONPAPER', 'Onpaper'
+    exam = models.ForeignKey(Exam, related_name='papers', on_delete=models.CASCADE)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
+    duration = models.DurationField(help_text="Duration of the exam paper (e.g., 1:30:00 for 1 hour 30 minutes)")
+    type = models.CharField(max_length=20, choices=ExamType.choices)
+    total_marks = models.IntegerField(default=100)
+    exam_date = models.DateTimeField()
+
+    class Meta:
+        unique_together = ('exam', 'subject') #
+
+
+class ExamResult(BaseIDModel):
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Pending'
+        PUBLISHED = 'PUBLISHED', 'Published'
+        ABSENT = 'ABSENT', 'Absent'
+        VOID = 'VOID', 'Void/Cheating'
+    # Relationships
+    student = models.ForeignKey(
+        'Student', 
+        on_delete=models.CASCADE, 
+        related_name='exam_results'
+    )
+    # Link to the specific Subject-Exam pair
+    exam_paper = models.ForeignKey(
+        'ExamPaper', 
+        on_delete=models.CASCADE, 
+        related_name='results'
+    )
+    # Data Fields
+    marks_obtained = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+        help_text="The raw score achieved by the student."
+    )
+    status = models.CharField(
+        max_length=20, 
+        choices=Status.choices, 
+        default=Status.PENDING
+    )
+    remarks = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        # Crucial: A student can only have ONE result per specific exam paper.
+        unique_together = ('student', 'exam_paper')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.student.full_name} - {self.exam_paper.subject.name}: {self.marks_obtained}"
+
+    @property
+    def percentage(self):
+        if self.exam_paper.total_marks > 0:
+            return (self.marks_obtained / self.exam_paper.total_marks) * 100
+        return 0
+
+

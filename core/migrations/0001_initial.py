@@ -122,7 +122,9 @@ class Migration(migrations.Migration):
                 ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
                 ('name', models.CharField(max_length=255)),
                 ('code', models.CharField(max_length=20, unique=True)),
+                ('description', models.TextField(blank=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
             ],
             options={
                 'ordering': ['code'],
@@ -160,20 +162,19 @@ class Migration(migrations.Migration):
                 'unique_together': {('year', 'semester_number')},
             },
         ),
-
-        # 3. Create the Junction table (SemesterSubject)
         migrations.CreateModel(
             name='SemesterSubject',
             fields=[
                 ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
                 ('semester', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.semester')),
                 ('subject', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.subject')),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
             ],
             options={
                 'unique_together': {('semester', 'subject')},
             },
         ),
-        # 4. Add the ManyToMany relationship to Semester using the 'through' table
         migrations.AddField(
             model_name='semester',
             name='subjects',
@@ -321,22 +322,6 @@ class Migration(migrations.Migration):
                 'unique_together': {('report', 'enquiry')},
             },
         ),
-        # migrations.CreateModel(
-        #     name='RolePermission',
-        #     fields=[
-        #         ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False, unique=True)),
-        #         ('created_at', models.DateTimeField(default=django.utils.timezone.now)),
-        #         ('updated_at', models.DateTimeField(auto_now=True)),
-        #         ('module', models.CharField(max_length=50)),
-        #         ('action', models.CharField(max_length=20)),
-        #         ('role', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='permissions', to='core.role')),
-        #     ],
-        #     options={
-        #         'verbose_name': 'Role Permission',
-        #         'verbose_name_plural': 'Role Permissions',
-        #         'unique_together': {('role', 'module', 'action')},
-        #     },
-        # ),
         migrations.CreateModel(
             name='IntakeSemester',
             fields=[
@@ -355,5 +340,65 @@ class Migration(migrations.Migration):
         migrations.AlterUniqueTogether(
             name='semester',
             unique_together={('year', 'semester_number')},
+        ),
+        migrations.CreateModel(
+            name='Exam',
+            fields=[
+                ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False, unique=True)),
+                ('created_at', models.DateTimeField(default=django.utils.timezone.now)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('title', models.CharField(max_length=200)),
+                ('date_started', models.DateField()),
+                ('semester', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.semester')),
+                ('intake', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.intake')),
+            ],
+            options={
+                'abstract': False,
+            },
+        ),
+        migrations.CreateModel(
+            name='ExamPaper',
+            fields=[
+                ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False, unique=True)),
+                ('created_at', models.DateTimeField(default=django.utils.timezone.now)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('total_marks', models.IntegerField(default=100)),
+                ('exam_date', models.DateTimeField()),
+                ('type', models.CharField(choices=[('PRESENTATION', 'Presentation'), ('ASSIGNMENT', 'Assignment'), ('ONPAPER', 'Onpaper')], default='PENDING', max_length=20)),
+                ('duration', models.DurationField(help_text='Duration of the exam paper (e.g., 1:30:00 for 1 hour 30 minutes)')),
+                ('exam', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='papers', to='core.exam')),
+                ('subject', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.subject')),
+            ],
+            options={
+                'unique_together': {('exam', 'subject')},
+            },
+        ),
+        migrations.CreateModel(
+            name='ExamResult',
+            fields=[
+                ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False, unique=True)),
+                ('created_at', models.DateTimeField(default=django.utils.timezone.now)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('marks_obtained', models.DecimalField(decimal_places=2, help_text='The raw score achieved by the student.', max_digits=5, validators=[django.core.validators.MinValueValidator(0)])),
+                ('status', models.CharField(choices=[('PENDING', 'Pending'), ('PUBLISHED', 'Published'), ('ABSENT', 'Absent'), ('VOID', 'Void/Cheating')], default='PENDING', max_length=20)),
+                ('remarks', models.TextField(blank=True, null=True)),
+                ('exam_paper', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='results', to='core.exampaper')),
+                ('student', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='exam_results', to='core.student')),
+            ],
+            options={
+                'ordering': ['-created_at'],
+                'unique_together': {('student', 'exam_paper')},
+            },
+        ),
+        migrations.CreateModel(
+            name='SchoolFee',
+            fields=[
+                ('id', models.CharField(editable=False, max_length=20, primary_key=True, serialize=False)),
+                ('enrollment', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.enrollment', related_name='semester_fees')),
+                ('semester', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.semester')),
+                ('is_paid', models.BooleanField(default=False)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now_add=True)),
+            ],
         ),
     ]

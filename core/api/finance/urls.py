@@ -1,9 +1,10 @@
 from django.urls import path
-from .views import StudentListView, IntakeListView, SchoolFeeUpdateView
+from .views import IntakeListView, SchoolFeeToggleView, IntakeEnrollmentListView
 
 urlpatterns = [
-    path('students/', StudentListView.as_view(), name='student-list'),
     path('intakes/', IntakeListView.as_view(), name='intake-list'),
-    path('fee/<str:pk>/', SchoolFeeUpdateView.as_view(), name='school-fee-update'),
+    path('intakes/<str:intake_id>/enrollments', IntakeEnrollmentListView.as_view(), name='intake-students'),
+
+    path('fee/', SchoolFeeToggleView.as_view(), name='school-fee-update'),
 
 ]

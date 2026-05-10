@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
-from core.models import User, Role, Department, Major
+from core.models import User, Role, Department, Major, Semester, Year, Subject, SemesterSubject
 
 class Command(BaseCommand):
     help = 'Seed initial data using built-in auth permissions and Directorate role'
@@ -73,7 +73,7 @@ class Command(BaseCommand):
             # Assigning keys to the bundles (Roles)
             dir_role = roles["Directorate"]
             # Directorate gets full CRUD on core business logic
-            for model in ["user", "department", "role", "major", "student", "enrollment", "dropout", "enquiry", "intake"]:
+            for model in ["user", "department", "role", "major", "student", "enrollment", "dropout", "enquiry", "intake", "exam", "subject", "semester", "exampaper", "examresult"]:
                 assign_perms(dir_role, model, ["add", "change", "delete", "view"])
 
             # Admissions Role permissions
@@ -82,25 +82,91 @@ class Command(BaseCommand):
             assign_perms(roles["Admissions"], "intake", ["view"])
             assign_perms(roles["Finance Staff"], "student", ["view"]) #72 44 72
             assign_perms(roles["Finance Staff"], "intake", ["view"]) 
+            assign_perms(roles["Finance Staff"], "schoolfee", ["view", "add"]) 
             
             # Exam Role permissions
-            for model in ["intake"]:
+            for model in ["intake", "exam", "student", "subject", "exampaper", "examresult"]:
                 assign_perms(roles["Exam Staff"], model, ["add", "change", "delete", "view"])
-            
-            # assign_perms(, "department", ["view"])Exam Staff
 
             # 4. Majors
             majors_data = [
                 ('Computer Science', 'CS', 'Computing and Software Systems'),
-                ('Business', 'BE', 'Strategic Management and Finance'),
-                ('Architecture', 'AR', 'Sustainable Design'),
             ]
+            
+            majors = {}
             for name, code, desc in majors_data:
-                Major.objects.update_or_create(
+                major, _ = Major.objects.get_or_create(
                     code=code,
-                    defaults={'id': f'MAJ-{code}', 'name': name, 'description': desc}
+                    defaults={
+                        'name': name, 
+                        'description': desc
+                    }
                 )
+                majors[code] = major # Store object, not just ID
             self.stdout.write('Majors seeded.')
+
+            # 5. Subjects (Independent Core Data)
+            subjects_data = [
+                ('Programming 101', 'CS101', 'Introduction to Programming'),
+                ('Data Structures', 'CS102', 'Fundamental Data Structures'),
+            ]
+            
+            subjects = {}
+            for name, code, desc in subjects_data:
+                subject, _ = Subject.objects.get_or_create(
+                    code=code,
+                    defaults={
+                        'name': name,
+                        'description': desc
+                    }
+                )
+                subjects[code] = subject
+            self.stdout.write('Subjects seeded.')
+        
+            # 6. Years
+            # Structure: (Major_Code, Year_Name, Year_Number, Type)
+            year_config = [
+                ('CS', 'Year-1', 1, 'FOUNDATION'),
+                ('CS', 'Year-2', 2, 'NORMAL'),
+            ]
+    
+            years = {}
+            for m_code, y_name, y_num, y_type in year_config:
+                year, _ = Year.objects.get_or_create(
+                    major=majors[m_code], # Pass the actual Major instance
+                    yearNumber=y_num,
+                    defaults={
+                        'name': y_name, 
+                        'type': y_type
+                    }
+                )
+                years[f"{m_code}-{y_num}"] = year
+            self.stdout.write('Years seeded.')
+
+            # Semesters
+            # Structure: (Year_Key, Sem_Number, Sem_Name)
+            semester_data = [
+                ('CS-1', 1, 'SEMESTER 1'),
+                ('CS-1', 1, 'SEMESTER 2'),
+            ]
+            semesters = {}
+            for y_key, s_num, s_name in semester_data:
+                semester, _ = Semester.objects.get_or_create(
+                    year=years[y_key], # Pass the actual Year instance
+                    semester_number=s_num,
+                    defaults={'name': s_name}
+                )
+                semesters[s_name] = semester
+            self.stdout.write('Semesters seeded.')
+
+            # semester subject
+            for name, code, desc in subjects_data:
+                semesterSubject, _  = SemesterSubject.objects.get_or_create(
+                    semester=semesters['SEMESTER 1'],
+                    subject=subjects[code]
+                )
+
+            self.stdout.write('SemesterSubject seeded.')
 
             # 5. Users - Connecting everything together
             users_data = [
@@ -126,6 +192,14 @@ class Command(BaseCommand):
                     'email': 'finance@sti.edu.mm',
                     'role': 'Finance Staff',
                     'dept': 'FINANCE',
+                    'is_admin': False
+                },
+                {
+                    'username': 'exam',
+                    'full_name': 'Ma Shwe Yee',
+                    'email': 'exam@sti.edu.mm',
+                    'role': 'Exam Staff',
+                    'dept': 'EXAM',
                     'is_admin': False
                 }
             ]
