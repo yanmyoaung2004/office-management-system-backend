@@ -1,5 +1,8 @@
 from rest_framework import serializers
-from core.models import Exam, ExamPaper, Semester, Major, Intake, Subject
+from core.models import Exam, ExamPaper, Semester, Major, Intake, Subject, ExamResult, Student, Enrollment
+from django.db import transaction
+
+
 
 class ExamPaperSerializer(serializers.ModelSerializer):
     class Meta:
@@ -122,4 +125,65 @@ class ExamListSerializer(serializers.ModelSerializer):
             sem_name = obj.semester.name
             return f"{year_name} - {sem_name}"
         return "N/A"
+
+
+class ExamPaperUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExamPaper
+        fields = ['question_file', 'total_marks', 'exam_date', 'duration', 'type']
+        
+    def validate_question_file(self, value):
+        limit = 5 * 1024 * 1024
+        if value.size > limit:
+            raise serializers.ValidationError("File size too large. Max size is 5MB.")
+        return value
+    
+
+class ExamResultItemSerializer(serializers.ModelSerializer):
+    # We use a nested serializer for the individual students
+    student = serializers.PrimaryKeyRelatedField(queryset=Student.objects.all())
+
+    class Meta:
+        model = ExamResult
+        fields = ['student', 'marks_obtained', 'status', 'remarks']
+
+class BulkExamResultSerializer(serializers.Serializer):
+    exam_paper = serializers.PrimaryKeyRelatedField(queryset=ExamPaper.objects.all())
+    results = ExamResultItemSerializer(many=True)
+
+    def create(self, validated_data):
+        exam_paper = validated_data['exam_paper']
+        results_data = validated_data['results']
+        
+        exam_results = []
+        for item in results_data:
+            if item['marks_obtained'] > exam_paper.total_marks:
+                raise serializers.ValidationError(
+                    f"Student {item['student'].id} marks exceed paper limit."
+                )
+                
+            exam_results.append(
+                ExamResult(
+                    id=ExamResult.generate_custom_id(),  # CRITICAL FIX
+                    exam_paper=exam_paper,
+                    student=item['student'],
+                    marks_obtained=item['marks_obtained'],
+                    status=item['status'],
+                    remarks=item.get('remarks', '')
+                )
+            )
+
+        with transaction.atomic():
+            return ExamResult.objects.bulk_create(exam_results)
+        
+
+        
+class EnrollmentStudentMinimalSerializer(serializers.ModelSerializer):
+    student_id = serializers.ReadOnlyField(source='student.id')
+    fullName = serializers.ReadOnlyField(source='student.full_name')
+    studentSchoolId = serializers.ReadOnlyField(source='student.school_id')
+    student_roll = serializers.ReadOnlyField(source='student.roll_number')
+    class Meta:
+        model = Enrollment
+        fields = ['id', 'student_id', 'studentSchoolId', 'fullName', 'student_roll', 'status']
 

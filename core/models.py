@@ -5,7 +5,7 @@ from .utils import generate_id
 from django.conf import settings
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, FileExtensionValidator
 import uuid
 
 DEPARTMENT_NAMES = [
@@ -23,7 +23,6 @@ USER_ROLES = [
 
 
 class BaseIDModel(models.Model):
-    """Abstract base model with custom ID field"""
     id = models.CharField(
         max_length=20,
         primary_key=True,
@@ -36,12 +35,15 @@ class BaseIDModel(models.Model):
     class Meta:
         abstract = True
 
+    @classmethod
+    def generate_custom_id(cls):
+        """Class method to generate a unique ID without needing an instance."""
+        prefix = cls.__name__[:2].upper()
+        return f"{prefix}-{uuid.uuid4().hex[:6].upper()}"
+
     def save(self, *args, **kwargs):
         if not self.id:
-            # Generate ID based on model class name
-            prefix = self.__class__.__name__[:2].upper()
-            # This is a simplified version - in production you'd want a more robust ID generation
-            self.id = f"{prefix}-{uuid.uuid4().hex[:6].upper()}"
+            self.id = self.generate_custom_id()
         super().save(*args, **kwargs)
 
 class Department(BaseIDModel):
@@ -495,6 +497,8 @@ class Exam(BaseIDModel):
     semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
     date_started = models.DateField()
 
+def exam_question_path(instance, filename):
+    return f'exams/{instance.exam.id}/{instance.subject.code}/{filename}'
 class ExamPaper(BaseIDModel):
     # This handles "In each exam there are many subjects"
     class ExamType(models.TextChoices):
@@ -507,6 +511,12 @@ class ExamPaper(BaseIDModel):
     type = models.CharField(max_length=20, choices=ExamType.choices)
     total_marks = models.IntegerField(default=100)
     exam_date = models.DateTimeField()
+    question_file = models.FileField(
+        upload_to=exam_question_path,
+        validators=[FileExtensionValidator(allowed_extensions=['pdf', 'doc', 'docx'])],
+        null=True,
+        blank=True
+    )
 
     class Meta:
         unique_together = ('exam', 'subject') #
@@ -518,19 +528,16 @@ class ExamResult(BaseIDModel):
         PUBLISHED = 'PUBLISHED', 'Published'
         ABSENT = 'ABSENT', 'Absent'
         VOID = 'VOID', 'Void/Cheating'
-    # Relationships
     student = models.ForeignKey(
         'Student', 
         on_delete=models.CASCADE, 
         related_name='exam_results'
     )
-    # Link to the specific Subject-Exam pair
     exam_paper = models.ForeignKey(
         'ExamPaper', 
         on_delete=models.CASCADE, 
         related_name='results'
     )
-    # Data Fields
     marks_obtained = models.DecimalField(
         max_digits=5, 
         decimal_places=2,
@@ -545,7 +552,6 @@ class ExamResult(BaseIDModel):
     remarks = models.TextField(blank=True, null=True)
     
     class Meta:
-        # Crucial: A student can only have ONE result per specific exam paper.
         unique_together = ('student', 'exam_paper')
         ordering = ['-created_at']
 
@@ -557,5 +563,6 @@ class ExamResult(BaseIDModel):
         if self.exam_paper.total_marks > 0:
             return (self.marks_obtained / self.exam_paper.total_marks) * 100
         return 0
+
 
 

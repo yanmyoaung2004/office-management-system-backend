@@ -18,10 +18,12 @@ subjects_needed = {
     "Developing Dynamic Websites": 2,
     "Machine Learning and Deep Learning": 2,
     "Data Structure and Algorithms": 2,
-    
 }
 
 all_results = []
+
+# Pre-calculate all slot coordinates and shuffle them
+ALL_POSITIONS = [(d, s) for d in DAYS for s in SLOTS]
 
 def get_subjects_already_in_day(schedule, day):
     assigned = []
@@ -30,67 +32,54 @@ def get_subjects_already_in_day(schedule, day):
             assigned.append(slot_val["subject"])
     return assigned
 
-def solve(slot_index, current_schedule, remaining_subs):
+def solve(pos_index, current_schedule, remaining_subs):
     if sum(remaining_subs.values()) == 0:
         all_results.append(deepcopy(current_schedule))
         return True
 
-    if len(all_results) >= VARIATION_LIMIT:
-        return True
-
-    total_slots = len(DAYS) * len(SLOTS)
-    if slot_index >= total_slots:
+    if len(all_results) >= VARIATION_LIMIT or pos_index >= len(ALL_POSITIONS):
         return False
 
-    day_name = DAYS[slot_index // len(SLOTS)]
-    slot_time = SLOTS[slot_index % len(SLOTS)]
+    # Pick the next random day/slot from our shuffled list
+    day_name, slot_time = ALL_POSITIONS[pos_index]
     subjects_today = get_subjects_already_in_day(current_schedule, day_name)
 
-    # Convert subjects to a list and shuffle to get variety in variations
     subs_list = list(remaining_subs.keys())
     random.shuffle(subs_list)
 
+    # Try assigning a subject to this random slot
     for sub in subs_list:
-        count = remaining_subs[sub]
-        if count > 0 and sub not in subjects_today:
+        if remaining_subs[sub] > 0 and sub not in subjects_today:
             
-            # --- TEACHER SHUFFLING ---
-            # Get all teachers who CAN teach this subject at this time
             available_teachers = [
                 name for name, data in teachers.items() 
                 if sub in data["subs"] and slot_time in data["slots"]
             ]
-            
-            # Shuffle them so Teacher A isn't always picked first for Math
             random.shuffle(available_teachers)
             
             for t_name in available_teachers:
-                # Place Assignment
                 current_schedule[day_name][slot_time] = {"subject": sub, "teacher": t_name}
                 remaining_subs[sub] -= 1
                 
-                if solve(slot_index + 1, current_schedule, remaining_subs):
-                    # Keep searching for more variations until limit is hit
-                    if len(all_results) >= VARIATION_LIMIT:
-                        return True
+                if solve(pos_index + 1, current_schedule, remaining_subs):
+                    if len(all_results) >= VARIATION_LIMIT: return True
                 
                 # Backtrack
                 remaining_subs[sub] += 1
-                current_schedule[day_name][slot_time] = None
+                current_schedule[day_name][slot_time] = "FREE"
 
-    # Option to skip slot if no subject fits (not likely here as slots == subjects)
-    if not any(v > 0 for v in remaining_subs.values()):
-        current_schedule[day_name][slot_time] = "FREE"
-        solve(slot_index + 1, current_schedule, remaining_subs)
-        current_schedule[day_name][slot_time] = None
+    # Also try leaving this slot FREE and moving to the next random slot
+    current_schedule[day_name][slot_time] = "FREE"
+    if solve(pos_index + 1, current_schedule, remaining_subs):
+        if len(all_results) >= VARIATION_LIMIT: return True
 
     return False
 
 # --- EXECUTION ---
-initial_timetable = {d: {s: None for s in SLOTS} for d in DAYS}
-# Use a seed if you want reproducible "randomness", otherwise leave it
-# random.seed(42) 
+# Randomize the slot filling order every time the script runs
+random.shuffle(ALL_POSITIONS)
 
+initial_timetable = {d: {s: "FREE" for s in SLOTS} for d in DAYS}
 solve(0, initial_timetable, subjects_needed)
 
 # --- OUTPUT ---

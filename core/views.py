@@ -30,12 +30,13 @@ class LoginView(APIView):
                 error_msg = next(iter(serializer.errors.values()))[0] 
                 return error_response(error_msg, 'UNAUTHORIZED', status.HTTP_401_UNAUTHORIZED)
             user = serializer.validated_data['user']
+            user_with_perms = User.objects.select_related('role', 'department').prefetch_related('role__permissions').get(id=user.id)
             refresh = RefreshToken.for_user(user)
             return Response({
                 'success': True,
                 'access': str(refresh.access_token),
                 'refresh': str(refresh),
-                'user': UserSerializer(user).data,
+                'user': UserSerializer(user_with_perms).data,
             }, status=status.HTTP_200_OK)
 
         except Exception:

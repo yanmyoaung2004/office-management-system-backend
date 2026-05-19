@@ -5,5 +5,16 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "asgiref==3.11.1",
+    "django==6.0.5",
+    "django-cors-headers>=4.9.0",
+    "djangorestframework>=3.17.1",
+    "djangorestframework-simplejwt>=5.5.1",
+    "gunicorn==26.0.0",
+    "packaging==26.2",
     "pillow>=12.2.0",
+    "sqlparse==0.5.5",
+    "tzdata==2026.2",
+    "waitress==3.0.2",
+    "whitenoise>=6.12.0",
 ]

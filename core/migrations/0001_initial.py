@@ -367,6 +367,12 @@ class Migration(migrations.Migration):
                 ('type', models.CharField(choices=[('PRESENTATION', 'Presentation'), ('ASSIGNMENT', 'Assignment'), ('ONPAPER', 'Onpaper')], default='PENDING', max_length=20)),
                 ('duration', models.DurationField(help_text='Duration of the exam paper (e.g., 1:30:00 for 1 hour 30 minutes)')),
                 ('exam', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='papers', to='core.exam')),
+                ('question_file', models.FileField(
+                    blank=True, 
+                    null=True, 
+                    upload_to='exam_questions/%Y/%m/%d/',
+                    validators=[django.core.validators.FileExtensionValidator(allowed_extensions=['pdf', 'doc', 'docx'])]
+                )),
                 ('subject', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.subject')),
             ],
             options={

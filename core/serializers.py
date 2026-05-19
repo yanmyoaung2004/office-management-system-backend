@@ -49,7 +49,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = Department
-        fields = ('id', 'name', 'created_at', 'updated_at')
+        fields = ('id', 'name')
 
 class RoleSerializer(serializers.ModelSerializer):
     """
@@ -57,7 +57,7 @@ class RoleSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = Role
-        fields = ('id', 'name', 'slug', 'created_at', 'updated_at')
+        fields = ('id', 'name')
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -66,15 +66,20 @@ class UserSerializer(serializers.ModelSerializer):
     """
     department = DepartmentSerializer(read_only=True)
     role = RoleSerializer(read_only=True)
+    permissions = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = (
-            'id', 'username', 'email', 'first_name', 
-            'last_name', 'role', 'department', 
+            'id', 'username', 'email',  
+            'role', 'department', 'permissions',
             'is_active', 'date_joined'
         )
         read_only_fields = ('id', 'date_joined')
+    def get_permissions(self, obj):
+        if not obj.role:
+            return []
+        return list(obj.role.permissions.values_list('codename', flat=True))
 
 class UserDetailSerializer(serializers.ModelSerializer):
     # Mapping camelCase (Frontend) to snake_case (Backend)
