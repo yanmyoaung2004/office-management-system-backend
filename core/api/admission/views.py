@@ -12,8 +12,8 @@ from collections import defaultdict
 from core.decorators import role_required
 from core.utils import  paginate_response, success_response, error_response
 from core.models import (
-     Major, Intake,  Enquiry, Semester, IntakeSemester,
-    FollowUpSession, Enrollment
+     Major, Intake,  Enquiry, Semester, IntakeSemester, 
+    FollowUpSession, Enrollment, SemesterSubject
 )
 from .serializers import (
     MajorDetailSerializer, SchoolIdUpdateSerializer,
@@ -24,8 +24,9 @@ from .serializers import (
     EnquiryUpdateSerializer,
     FollowUpSessionSerializer, FollowUpCreateSerializer, FollowUpUpdateSerializer,
     MajorEnrollmentSerializer,
-    DropoutSerializer, 
-    EnrollmentListSerializer, EnrollmentSerializer
+    DropoutSerializer, SemesterDetailSerializer,
+    EnrollmentListSerializer, EnrollmentSerializer,
+    SemesterSubjectAddSerializer,  SubjectSerializer
 )
 
 
@@ -43,9 +44,6 @@ class MajorListCreateView(APIView):
 
     @method_decorator(role_required('add_major'))
     def post(self, request):
-        if request.user.role != 'admin':
-            return error_response('Admin only', 'FORBIDDEN', 403)
-
         serializer = MajorDetailSerializer(data=request.data)
         if not serializer.is_valid():
             return Response({
@@ -85,8 +83,6 @@ class MajorDetailView(APIView):
 
     @method_decorator(role_required('delete_major'))
     def delete(self, request, pk):
-        if not request.user.role == 'admin':
-            return error_response('Admin only', 'FORBIDDEN', 403)
         obj = get_object_or_404(Major, pk=pk)
         obj.delete()
         return success_response(message='Major deleted successfully')
@@ -176,8 +172,6 @@ class IntakeDetailView(APIView):
 
     @method_decorator(role_required('change_intake'))    
     def put(self, request, pk):
-        if not request.user.role == 'admin':
-            return error_response('Admin only', 'FORBIDDEN', 403)
         obj = get_object_or_404(Intake, pk=pk)
         serializer = IntakeCreateSerializer(obj, data=request.data, partial=True)
         if not serializer.is_valid():
@@ -192,8 +186,6 @@ class IntakeDetailView(APIView):
 
     @method_decorator(role_required('delete_intake'))    
     def delete(self, request, pk):
-        if not request.user.role == 'admin':
-            return error_response('Admin only', 'FORBIDDEN', 403)
         obj = get_object_or_404(Intake, pk=pk)
         obj.delete()
         return success_response(message='Intake deleted successfully')
@@ -631,4 +623,59 @@ class FilterDataView(APIView):
             'majorIntakeMap': dict(mapping)
         })
     
+
+class SemesterSubjectView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_semester(self, pk):
+        return get_object_or_404(
+            Semester.objects.select_related('year__major'),
+            pk=pk
+        )
+
+    @method_decorator(role_required('view_subject'))
+    def get(self, request, pk):
+        semester = self.get_semester(pk)
+        subjects = semester.subjects.all().order_by('code')
+        return success_response(data={
+            'semester': SemesterDetailSerializer(semester).data,
+            'subjects': SubjectSerializer(subjects, many=True).data,
+        })
+
+    @method_decorator(role_required('add_subject'))
+    def post(self, request, pk):
+        semester = self.get_semester(pk)
+        serializer = SemesterSubjectAddSerializer(
+            data=request.data,
+            context={'semester': semester}
+        )
+        if not serializer.is_valid():
+            return error_response(serializer.errors, 'VALIDATION_ERROR', status.HTTP_400_BAD_REQUEST)
+
+        results = serializer.save()
+        return success_response(
+            data={
+                'semester': SemesterDetailSerializer(semester).data,
+                'subjects': SubjectSerializer(semester.subjects.all(), many=True).data,
+            },
+            message=f"Added {len(results)} subject(s) to semester.",
+            status_code=status.HTTP_201_CREATED
+        )
+
+    @method_decorator(role_required('delete_subject'))
+    def delete(self, request, pk):
+        subject_id = request.query_params.get('subject_id')
+        if not subject_id:
+            return error_response('subject_id query param is required.', 'VALIDATION_ERROR', status.HTTP_400_BAD_REQUEST)
+
+        semester = self.get_semester(pk)
+        deleted, _ = SemesterSubject.objects.filter(
+            semester=semester,
+            subject_id=subject_id
+        ).delete()
+
+        if deleted == 0:
+            return error_response('Subject not found in this semester.', 'NOT_FOUND', status.HTTP_404_NOT_FOUND)
+
+        return success_response(message="Subject removed from semester.")
 

@@ -1,14 +1,15 @@
 
 from rest_framework.generics import ListCreateAPIView
 from rest_framework import generics, parsers, status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.utils.decorators import method_decorator
+from django.db.models import Prefetch
 from core.decorators import role_required 
 from .serializers import  ExamListSerializer
 from rest_framework.views import APIView
-from core.models import Intake, Exam, ExamPaper, Enrollment
+from core.models import Intake, Exam, ExamPaper, ExamResult, ExamResultShareLink, Enrollment
 from core.utils import paginate_response
-from .serializers import  IntakeSerializer, ExamCreateSerializer, ExamPaperUploadSerializer, BulkExamResultSerializer, EnrollmentStudentMinimalSerializer
+from .serializers import  IntakeSerializer, ExamCreateSerializer, ExamPaperUploadSerializer, BulkExamResultSerializer, EnrollmentStudentMinimalSerializer, ShareLinkCreateSerializer, ShareLinkSerializer, ShareLinkDataSerializer, ShareLinkResultSubmitSerializer
 from django.shortcuts import get_object_or_404
 from core.utils import success_response, error_response
 
@@ -69,16 +70,25 @@ class ExamDetailView(APIView):
     @method_decorator(role_required('view_exam'))
     def get(self, request, pk):
         exam_obj = self.get_object(pk)
-        
+        exam_papers = ExamPaper.objects.filter(exam=exam_obj).select_related('subject')
+
         active_enrollments = Enrollment.objects.filter(
             intake=exam_obj.intake,
             status='Enrolled'
-        ).select_related('student').only(
-            'id', 'status', 'student__id', 'student__full_name'
+        ).select_related('student').prefetch_related(
+            Prefetch(
+                'student__exam_results',
+                queryset=ExamResult.objects.filter(
+                    exam_paper__in=exam_papers
+                ).select_related('exam_paper__subject'),
+                to_attr='results_for_this_exam'
+            )
         )
 
         exam_serializer = ExamListSerializer(exam_obj)
-        enrollment_serializer = EnrollmentStudentMinimalSerializer(active_enrollments, many=True)
+        enrollment_serializer = EnrollmentStudentMinimalSerializer(
+            active_enrollments, many=True
+        )
 
         return success_response(data={
             "exam": exam_serializer.data,
@@ -129,12 +139,18 @@ class ExamPaperUploadView(generics.UpdateAPIView):
         return self.update(request, *args, **kwargs)
     
 class ExamResultView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @method_decorator(role_required('change_exam'))
     def post(self, request, *args, **kwargs):
         serializer = BulkExamResultSerializer(data=request.data)
         if serializer.is_valid():
             try:
-                serializer.save()
-                return success_response(message=f"Successfully processed {len(serializer.validated_data['results'])} records.")
+                result = serializer.save()
+                created = len(result.get('_created', []))
+                updated = len(result.get('_updated', []))
+                msg = f"{'Created ' + str(created) if created else ''}{' and ' if created and updated else ''}{'Updated ' + str(updated) if updated else ''} record(s)."
+                return success_response(message=msg)
             except Exception as e:
                 return error_response(
                     error=str(e),
@@ -147,5 +163,86 @@ class ExamResultView(APIView):
                 status_code=status.HTTP_400_BAD_REQUEST
             )     
 
+
+class ShareLinkCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @method_decorator(role_required('view_exam'))
+    def post(self, request):
+        serializer = ShareLinkCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(serializer.errors, 'VALIDATION_ERROR', status.HTTP_400_BAD_REQUEST)
+        link = serializer.save()
+        link_data = ShareLinkSerializer(link).data
+        link_data['url'] = f"/api/exam/share-links/{link.code}"
+        return success_response(data=link_data, status_code=status.HTTP_201_CREATED)
+
+
+class ShareLinkAccessView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, code):
+        try:
+            link = ExamResultShareLink.objects.select_related(
+                'exam_paper__exam__intake',
+                'exam_paper__exam__semester',
+                'exam_paper__subject'
+            ).get(code=code, is_active=True)
+        except ExamResultShareLink.DoesNotExist:
+            return error_response('Share link not found or inactive.', 'NOT_FOUND', status.HTTP_404_NOT_FOUND)
+        if link.is_expired:
+            return error_response('Share link has expired.', 'LINK_EXPIRED', status.HTTP_410_GONE)
+
+        exam_paper = link.exam_paper
+        exam_obj = exam_paper.exam
+
+        enrollments = Enrollment.objects.filter(
+            intake=exam_obj.intake,
+            status='Enrolled'
+        ).select_related('student').prefetch_related(
+            Prefetch(
+                'student__exam_results',
+                queryset=ExamResult.objects.filter(
+                    exam_paper=exam_paper
+                ).select_related('exam_paper__subject'),
+                to_attr='results_for_this_exam'
+            )
+        )
+
+        data = ShareLinkDataSerializer({
+            'exam': exam_obj,
+            'paper': exam_paper,
+            'eligible_students': enrollments,
+        }).data
+
+        return success_response(data=data)
+
+
+class ShareLinkResultSubmitView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, code):
+        try:
+            link = ExamResultShareLink.objects.get(code=code, is_active=True)
+        except ExamResultShareLink.DoesNotExist:
+            return error_response('Share link not found or inactive.', 'NOT_FOUND', status.HTTP_404_NOT_FOUND)
+        if link.is_expired:
+            return error_response('Share link has expired.', 'LINK_EXPIRED', status.HTTP_410_GONE)
+
+        serializer = ShareLinkResultSubmitSerializer(
+            data=request.data,
+            context={'exam_paper': link.exam_paper}
+        )
+        if not serializer.is_valid():
+            return error_response(serializer.errors, 'VALIDATION_ERROR', status.HTTP_400_BAD_REQUEST)
+
+        try:
+            result = serializer.save()
+            created = len(result.get('_created', []))
+            updated = len(result.get('_updated', []))
+            msg = f"{'Created ' + str(created) if created else ''}{' and ' if created and updated else ''}{'Updated ' + str(updated) if updated else ''} record(s)."
+            return success_response(message=msg)
+        except Exception as e:
+            return error_response(str(e), status_code=status.HTTP_400_BAD_REQUEST)
 
 

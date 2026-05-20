@@ -5,7 +5,8 @@ from django.utils.translation import gettext_lazy as _
 from django.contrib.auth import authenticate
 from core.models import (
     User, Major, Year, Semester, Intake, Student, Enquiry, Subject,
-    FollowUpSession, Dropout, Enrollment, Notification, Department, Role
+    FollowUpSession, Dropout, Enrollment,  Department, Role,
+    SemesterSubject
 )
 
 
@@ -760,5 +761,49 @@ class DropoutSerializer(serializers.ModelSerializer):
 class MajorEnrollmentSerializer(serializers.Serializer):
     major = serializers.CharField(source='intake__major__name')
     totalEnrolled = serializers.IntegerField(source='total')
+
+class SubjectInSemesterSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SemesterSubject
+        fields = ['id', 'semester', 'subject']
+        depth = 1
+
+class SemesterSubjectAddSerializer(serializers.Serializer):
+    subjects = serializers.ListField(
+        child=serializers.DictField(),
+        allow_empty=False
+    )
+
+    def validate_subjects(self, value):
+        for item in value:
+            if not item.get('code') or not item.get('name'):
+                raise serializers.ValidationError("Each subject must have 'code' and 'name'.")
+        return value
+
+    def create(self, validated_data):
+        semester = self.context['semester']
+        subjects_data = validated_data['subjects']
+        results = []
+
+        with transaction.atomic():
+            for item in subjects_data:
+                subject, _ = Subject.objects.get_or_create(
+                    code=item['code'],
+                    defaults={
+                        'name': item['name'],
+                        'description': item.get('description', ''),
+                    }
+                )
+                link, created = SemesterSubject.objects.get_or_create(
+                    semester=semester,
+                    subject=subject
+                )
+                results.append({
+                    'subject': subject,
+                    'semester_subject': link,
+                    'created': created
+                })
+
+        return results
 
     

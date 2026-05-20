@@ -1,6 +1,8 @@
+from datetime import timedelta
 from rest_framework import serializers
-from core.models import Exam, ExamPaper, Semester, Major, Intake, Subject, ExamResult, Student, Enrollment
+from core.models import Exam, ExamPaper, Semester, Major, Intake, Subject, ExamResult, ExamResultShareLink, Student, Enrollment
 from django.db import transaction
+from django.utils import timezone
 
 
 
@@ -30,9 +32,30 @@ class ExamCreateSerializer(serializers.ModelSerializer):
         instance.save()
 
         if papers_data is not None:
-            instance.papers.all().delete()
-            for paper_data in papers_data:
-                ExamPaper.objects.create(exam=instance, **paper_data)
+            with transaction.atomic():
+                incoming_ids = {p['subject'].pk for p in papers_data}
+
+                for paper in instance.papers.all():
+                    if paper.subject_id not in incoming_ids and not paper.results.exists():
+                        paper.delete()
+
+                for paper_data in papers_data:
+                    subject = paper_data['subject']
+                    existing = instance.papers.filter(subject=subject).first()
+                    if existing:
+                        for attr, val in paper_data.items():
+                            if attr not in ('id', 'subject'):
+                                setattr(existing, attr, val)
+                        existing.save()
+                    else:
+                        ExamPaper.objects.create(
+                            exam=instance,
+                            subject=subject,
+                            duration=paper_data.get('duration'),
+                            type=paper_data.get('type'),
+                            total_marks=paper_data.get('total_marks', 100),
+                            exam_date=paper_data.get('exam_date'),
+                        )
 
         return instance
 
@@ -140,13 +163,16 @@ class ExamPaperUploadSerializer(serializers.ModelSerializer):
     
 
 class ExamResultItemSerializer(serializers.ModelSerializer):
-    # We use a nested serializer for the individual students
-    student = serializers.PrimaryKeyRelatedField(queryset=Student.objects.all())
+    # Use SlugRelatedField to look up by school_id instead of the database PK
+    student = serializers.SlugRelatedField(
+        slug_field='school_id',
+        queryset=Student.objects.all()
+    )
 
     class Meta:
         model = ExamResult
         fields = ['student', 'marks_obtained', 'status', 'remarks']
-
+        
 class BulkExamResultSerializer(serializers.Serializer):
     exam_paper = serializers.PrimaryKeyRelatedField(queryset=ExamPaper.objects.all())
     results = ExamResultItemSerializer(many=True)
@@ -154,36 +180,132 @@ class BulkExamResultSerializer(serializers.Serializer):
     def create(self, validated_data):
         exam_paper = validated_data['exam_paper']
         results_data = validated_data['results']
-        
-        exam_results = []
-        for item in results_data:
-            if item['marks_obtained'] > exam_paper.total_marks:
-                raise serializers.ValidationError(
-                    f"Student {item['student'].id} marks exceed paper limit."
-                )
-                
-            exam_results.append(
-                ExamResult(
-                    id=ExamResult.generate_custom_id(),  # CRITICAL FIX
-                    exam_paper=exam_paper,
-                    student=item['student'],
-                    marks_obtained=item['marks_obtained'],
-                    status=item['status'],
-                    remarks=item.get('remarks', '')
-                )
-            )
+
+        created = []
+        updated = []
 
         with transaction.atomic():
-            return ExamResult.objects.bulk_create(exam_results)
+            for item in results_data:
+                if item['marks_obtained'] > exam_paper.total_marks:
+                    raise serializers.ValidationError(
+                        f"Student {item['student'].id} marks exceed paper limit."
+                    )
+
+                result, is_new = ExamResult.objects.update_or_create(
+                    exam_paper=exam_paper,
+                    student=item['student'],
+                    defaults={
+                        'marks_obtained': item['marks_obtained'],
+                        'status': item['status'],
+                        'remarks': item.get('remarks', ''),
+                    }
+                )
+                if is_new:
+                    created.append(result)
+                else:
+                    updated.append(result)
+
+        verb = "Created" if created else "Updated"
+        return {**validated_data, '_created': created, '_updated': updated}
+        
         
 
-        
+class ExamPaperResultInfoSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    subject_name = serializers.CharField()
+    duration = serializers.DurationField()
+    type = serializers.CharField()
+    total_marks = serializers.IntegerField()
+    exam_date = serializers.DateTimeField()
+
+class ExamResultInfoSerializer(serializers.ModelSerializer):
+    examPaper = serializers.SerializerMethodField()
+    marksObtained = serializers.DecimalField(source='marks_obtained', max_digits=5, decimal_places=2)
+
+    class Meta:
+        model = ExamResult
+        fields = ['examPaper', 'marksObtained', 'status', 'remarks']
+
+    def get_examPaper(self, obj):
+        paper = obj.exam_paper
+        return {
+            'id': paper.id,
+            'subject_name': paper.subject.name,
+            'duration': paper.duration,
+            'type': paper.type,
+            'total_marks': paper.total_marks,
+            'exam_date': paper.exam_date,
+        }
+
 class EnrollmentStudentMinimalSerializer(serializers.ModelSerializer):
     student_id = serializers.ReadOnlyField(source='student.id')
     fullName = serializers.ReadOnlyField(source='student.full_name')
     studentSchoolId = serializers.ReadOnlyField(source='student.school_id')
-    student_roll = serializers.ReadOnlyField(source='student.roll_number')
+    examResults = serializers.SerializerMethodField()
+
     class Meta:
         model = Enrollment
-        fields = ['id', 'student_id', 'studentSchoolId', 'fullName', 'student_roll', 'status']
+        fields = ['id', 'student_id', 'studentSchoolId', 'fullName', 'status', 'examResults']
+
+    def get_examResults(self, obj):
+        results = getattr(obj.student, 'results_for_this_exam', [])
+        return ExamResultInfoSerializer(results, many=True).data
+
+class ShareLinkCreateSerializer(serializers.Serializer):
+    exam_paper = serializers.PrimaryKeyRelatedField(queryset=ExamPaper.objects.all())
+    expires_in_days = serializers.IntegerField(required=False, default=7, min_value=1, max_value=365)
+
+    def create(self, validated_data):
+        expires_in = validated_data.pop('expires_in_days', 7)
+        link = ExamResultShareLink.objects.create(
+            exam_paper=validated_data['exam_paper'],
+            expires_at=timezone.now() + timedelta(days=expires_in)
+        )
+        return link
+
+class ShareLinkSerializer(serializers.ModelSerializer):
+    code = serializers.UUIDField(read_only=True)
+    is_expired = serializers.ReadOnlyField()
+
+    class Meta:
+        model = ExamResultShareLink
+        fields = ['id', 'exam_paper', 'code', 'is_active', 'is_expired', 'expires_at', 'created_at']
+
+class ShareLinkDataSerializer(serializers.Serializer):
+    exam = ExamListSerializer()
+    paper = ExamPaperListSerializer()
+    eligible_students = EnrollmentStudentMinimalSerializer(many=True)
+
+class ShareLinkResultSubmitSerializer(serializers.Serializer):
+    results = ExamResultItemSerializer(many=True)
+
+    def create(self, validated_data):
+        exam_paper = self.context['exam_paper']
+        results_data = validated_data['results']
+
+        created = []
+        updated = []
+
+        with transaction.atomic():
+            for item in results_data:
+                if item['marks_obtained'] > exam_paper.total_marks:
+                    raise serializers.ValidationError(
+                        f"Student {item['student'].id} marks exceed paper limit."
+                    )
+
+                result, is_new = ExamResult.objects.update_or_create(
+                    exam_paper=exam_paper,
+                    student=item['student'],
+                    defaults={
+                        'marks_obtained': item['marks_obtained'],
+                        'status': item['status'],
+                        'remarks': item.get('remarks', ''),
+                    }
+                )
+                if is_new:
+                    created.append(result)
+                else:
+                    updated.append(result)
+
+        return {'_created': created, '_updated': updated}
 

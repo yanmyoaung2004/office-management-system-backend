@@ -34,6 +34,9 @@ urlpatterns = [
     path('reactivate/', views.CreateEnrollmentView.as_view(), name='reactivate'),
     # path('dropouts/<str:pk>', views.DropoutDetailView.as_view()),
 
+    # # Subjects
+    path('semesters/<str:pk>/subjects', views.SemesterSubjectView.as_view(), name='semester-subjects'),
+
     path('chart-data', views.DashboardSummaryView.as_view(), name='chart-data'),
     path('filter-data', views.FilterDataView.as_view(), name='filter-data'),
     

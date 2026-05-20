@@ -4,6 +4,7 @@ from django.db import models
 from .utils import generate_id
 from django.conf import settings
 from django.utils import timezone
+from datetime import timedelta
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, FileExtensionValidator
 import uuid
@@ -564,5 +565,27 @@ class ExamResult(BaseIDModel):
             return (self.marks_obtained / self.exam_paper.total_marks) * 100
         return 0
 
+class ExamResultShareLink(models.Model):
+    exam_paper = models.ForeignKey(
+        ExamPaper, on_delete=models.CASCADE, related_name='share_links'
+    )
+    code = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    is_active = models.BooleanField(default=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(days=7)
+        super().save(*args, **kwargs)
+
+    @property
+    def is_expired(self):
+        if not self.expires_at:
+            return False 
+        return timezone.now() > self.expires_at
+
+    def __str__(self):
+        return f"Share:{self.code} - {self.exam_paper.subject.name}"
 
 
