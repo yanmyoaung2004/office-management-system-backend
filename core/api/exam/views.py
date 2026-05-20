@@ -7,7 +7,7 @@ from django.db.models import Prefetch
 from core.decorators import role_required 
 from .serializers import  ExamListSerializer
 from rest_framework.views import APIView
-from core.models import Intake, Exam, ExamPaper, ExamResult, ExamResultShareLink, Enrollment
+from core.models import Intake, Exam, ExamPaper, ExamPaperComponent, ExamResult, ExamResultShareLink, Enrollment
 from core.utils import paginate_response
 from .serializers import  IntakeSerializer, ExamCreateSerializer, ExamPaperUploadSerializer, BulkExamResultSerializer, EnrollmentStudentMinimalSerializer, ShareLinkCreateSerializer, ShareLinkSerializer, ShareLinkDataSerializer, ShareLinkResultSubmitSerializer
 from django.shortcuts import get_object_or_404
@@ -27,7 +27,7 @@ class IntakeSemesterListView(APIView):
 
 
 class ExamListCreateView(ListCreateAPIView):
-    queryset = Exam.objects.all().prefetch_related('papers', 'papers__subject').select_related('intake', 'semester')
+    queryset = Exam.objects.all().prefetch_related('papers', 'papers__components', 'papers__subject').select_related('intake', 'semester')
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
@@ -36,6 +36,7 @@ class ExamListCreateView(ListCreateAPIView):
             'semester'
         ).prefetch_related(
             'papers', 
+            'papers__components',
             'papers__subject'
         ).order_by('-date_started')
 
@@ -70,7 +71,9 @@ class ExamDetailView(APIView):
     @method_decorator(role_required('view_exam'))
     def get(self, request, pk):
         exam_obj = self.get_object(pk)
-        exam_papers = ExamPaper.objects.filter(exam=exam_obj).select_related('subject')
+        exam_components = ExamPaperComponent.objects.filter(
+            exam_paper__exam=exam_obj
+        ).select_related('exam_paper__subject')
 
         active_enrollments = Enrollment.objects.filter(
             intake=exam_obj.intake,
@@ -79,8 +82,8 @@ class ExamDetailView(APIView):
             Prefetch(
                 'student__exam_results',
                 queryset=ExamResult.objects.filter(
-                    exam_paper__in=exam_papers
-                ).select_related('exam_paper__subject'),
+                    component__in=exam_components
+                ).select_related('component__exam_paper__subject'),
                 to_attr='results_for_this_exam'
             )
         )
@@ -120,22 +123,16 @@ class ExamDetailView(APIView):
     
 
 role_required('change_exam')
-class ExamPaperUploadView(generics.UpdateAPIView):
-    queryset = ExamPaper.objects.all()
+class ExamPaperComponentUploadView(generics.UpdateAPIView):
+    queryset = ExamPaperComponent.objects.all()
     serializer_class = ExamPaperUploadSerializer
     parser_classes = [parsers.MultiPartParser, parsers.FormParser]
-    lookup_field = 'id'  # Using your custom CharField ID
+    lookup_field = 'id'
 
     def patch(self, request, *args, **kwargs):
-        """
-        Handles partial updates (e.g., just uploading the file).
-        """
         return self.partial_update(request, *args, **kwargs)
 
     def put(self, request, *args, **kwargs):
-        """
-        Handles full updates.
-        """
         return self.update(request, *args, **kwargs)
     
 class ExamResultView(APIView):
@@ -184,16 +181,17 @@ class ShareLinkAccessView(APIView):
     def get(self, request, code):
         try:
             link = ExamResultShareLink.objects.select_related(
-                'exam_paper__exam__intake',
-                'exam_paper__exam__semester',
-                'exam_paper__subject'
+                'component__exam_paper__exam__intake',
+                'component__exam_paper__exam__semester',
+                'component__exam_paper__subject'
             ).get(code=code, is_active=True)
         except ExamResultShareLink.DoesNotExist:
             return error_response('Share link not found or inactive.', 'NOT_FOUND', status.HTTP_404_NOT_FOUND)
         if link.is_expired:
             return error_response('Share link has expired.', 'LINK_EXPIRED', status.HTTP_410_GONE)
 
-        exam_paper = link.exam_paper
+        component = link.component
+        exam_paper = component.exam_paper
         exam_obj = exam_paper.exam
 
         enrollments = Enrollment.objects.filter(
@@ -203,8 +201,8 @@ class ShareLinkAccessView(APIView):
             Prefetch(
                 'student__exam_results',
                 queryset=ExamResult.objects.filter(
-                    exam_paper=exam_paper
-                ).select_related('exam_paper__subject'),
+                    component=component
+                ).select_related('component__exam_paper__subject'),
                 to_attr='results_for_this_exam'
             )
         )
@@ -231,7 +229,7 @@ class ShareLinkResultSubmitView(APIView):
 
         serializer = ShareLinkResultSubmitSerializer(
             data=request.data,
-            context={'exam_paper': link.exam_paper}
+            context={'component': link.component}
         )
         if not serializer.is_valid():
             return error_response(serializer.errors, 'VALIDATION_ERROR', status.HTTP_400_BAD_REQUEST)

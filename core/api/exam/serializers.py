@@ -1,15 +1,22 @@
 from datetime import timedelta
 from rest_framework import serializers
-from core.models import Exam, ExamPaper, Semester, Major, Intake, Subject, ExamResult, ExamResultShareLink, Student, Enrollment
+from core.models import Exam, ExamPaper, ExamPaperComponent, Semester, Major, Intake, Subject, ExamResult, ExamResultShareLink, Student, Enrollment
 from django.db import transaction
 from django.utils import timezone
 
 
 
+class ExamPaperComponentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExamPaperComponent
+        fields = ['id', 'type', 'exam_date', 'duration', 'marks_allocated', 'question_file']
+
 class ExamPaperSerializer(serializers.ModelSerializer):
+    components = ExamPaperComponentSerializer(many=True)
+
     class Meta:
         model = ExamPaper
-        fields = ['id', 'subject', 'duration', 'type', 'total_marks', 'exam_date']
+        fields = ['id', 'subject', 'components']
 
 class ExamCreateSerializer(serializers.ModelSerializer):
     papers = ExamPaperSerializer(many=True)
@@ -22,9 +29,12 @@ class ExamCreateSerializer(serializers.ModelSerializer):
         papers_data = validated_data.pop('papers')
         exam = Exam.objects.create(**validated_data)
         for paper_data in papers_data:
-            ExamPaper.objects.create(exam=exam, **paper_data)
-            
+            components_data = paper_data.pop('components', [])
+            paper = ExamPaper.objects.create(exam=exam, subject=paper_data['subject'])
+            for comp_data in components_data:
+                ExamPaperComponent.objects.create(exam_paper=paper, **comp_data)
         return exam
+
     def update(self, instance, validated_data):
         papers_data = validated_data.pop('papers', None)
         for attr, value in validated_data.items():
@@ -33,30 +43,29 @@ class ExamCreateSerializer(serializers.ModelSerializer):
 
         if papers_data is not None:
             with transaction.atomic():
-                incoming_ids = {p['subject'].pk for p in papers_data}
-
+                incoming_subjects = {p['subject'].pk for p in papers_data}
                 for paper in instance.papers.all():
-                    if paper.subject_id not in incoming_ids and not paper.results.exists():
+                    if paper.subject_id not in incoming_subjects and not paper.components.exists():
                         paper.delete()
 
                 for paper_data in papers_data:
+                    components_data = paper_data.pop('components', [])
                     subject = paper_data['subject']
-                    existing = instance.papers.filter(subject=subject).first()
-                    if existing:
-                        for attr, val in paper_data.items():
-                            if attr not in ('id', 'subject'):
-                                setattr(existing, attr, val)
-                        existing.save()
-                    else:
-                        ExamPaper.objects.create(
-                            exam=instance,
-                            subject=subject,
-                            duration=paper_data.get('duration'),
-                            type=paper_data.get('type'),
-                            total_marks=paper_data.get('total_marks', 100),
-                            exam_date=paper_data.get('exam_date'),
+                    paper, _ = ExamPaper.objects.get_or_create(
+                        exam=instance, subject=subject
+                    )
+                    incoming_types = {c['type'] for c in components_data}
+                    paper.components.exclude(type__in=incoming_types).delete()
+                    for comp_data in components_data:
+                        ExamPaperComponent.objects.update_or_create(
+                            exam_paper=paper,
+                            type=comp_data['type'],
+                            defaults={
+                                'exam_date': comp_data['exam_date'],
+                                'duration': comp_data['duration'],
+                                'marks_allocated': comp_data.get('marks_allocated', 100),
+                            }
                         )
-
         return instance
 
 class SubjectMinimalSerializer(serializers.ModelSerializer):
@@ -124,12 +133,18 @@ class IntakeSerializer(serializers.ModelSerializer):
             return f"{year_name} - {sem_name}"
         return "N/A"
 
+class ExamPaperComponentListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExamPaperComponent
+        fields = ['id', 'type', 'exam_date', 'duration', 'marks_allocated', 'question_file']
+
 class ExamPaperListSerializer(serializers.ModelSerializer):
     subject_name = serializers.ReadOnlyField(source='subject.name')
+    components = ExamPaperComponentListSerializer(many=True, read_only=True)
 
     class Meta:
         model = ExamPaper
-        fields = ['id', 'subject', 'subject_name', 'duration', 'type', 'total_marks', 'exam_date']
+        fields = ['id', 'subject', 'subject_name', 'components']
 
 class ExamListSerializer(serializers.ModelSerializer):
     # 'papers' matches the related_name in your ForeignKey
@@ -152,8 +167,8 @@ class ExamListSerializer(serializers.ModelSerializer):
 
 class ExamPaperUploadSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ExamPaper
-        fields = ['question_file', 'total_marks', 'exam_date', 'duration', 'type']
+        model = ExamPaperComponent
+        fields = ['question_file', 'marks_allocated', 'exam_date', 'duration', 'type']
         
     def validate_question_file(self, value):
         limit = 5 * 1024 * 1024
@@ -174,29 +189,27 @@ class ExamResultItemSerializer(serializers.ModelSerializer):
         fields = ['student', 'marks_obtained', 'status', 'remarks']
         
 class BulkExamResultSerializer(serializers.Serializer):
-    exam_paper = serializers.PrimaryKeyRelatedField(queryset=ExamPaper.objects.all())
+    component = serializers.PrimaryKeyRelatedField(queryset=ExamPaperComponent.objects.all())
     results = ExamResultItemSerializer(many=True)
 
     def create(self, validated_data):
-        exam_paper = validated_data['exam_paper']
+        component = validated_data['component']
         results_data = validated_data['results']
-
         created = []
         updated = []
 
         with transaction.atomic():
             for item in results_data:
-                if item['marks_obtained'] > exam_paper.total_marks:
+                if item['marks_obtained'] > component.marks_allocated:
                     raise serializers.ValidationError(
-                        f"Student {item['student'].id} marks exceed paper limit."
+                        f"Student {item['student'].id} marks exceed component limit."
                     )
-
                 result, is_new = ExamResult.objects.update_or_create(
-                    exam_paper=exam_paper,
+                    component=component,
                     student=item['student'],
                     defaults={
                         'marks_obtained': item['marks_obtained'],
-                        'status': item['status'],
+                        'status': item.get('status', 'PENDING'),
                         'remarks': item.get('remarks', ''),
                     }
                 )
@@ -204,37 +217,35 @@ class BulkExamResultSerializer(serializers.Serializer):
                     created.append(result)
                 else:
                     updated.append(result)
-
-        verb = "Created" if created else "Updated"
-        return {**validated_data, '_created': created, '_updated': updated}
+        return {'_created': created, '_updated': updated}
         
         
 
-class ExamPaperResultInfoSerializer(serializers.Serializer):
+class ExamPaperComponentResultInfoSerializer(serializers.Serializer):
     id = serializers.CharField()
+    type = serializers.CharField()
     subject_name = serializers.CharField()
     duration = serializers.DurationField()
-    type = serializers.CharField()
-    total_marks = serializers.IntegerField()
+    marks_allocated = serializers.IntegerField()
     exam_date = serializers.DateTimeField()
 
 class ExamResultInfoSerializer(serializers.ModelSerializer):
-    examPaper = serializers.SerializerMethodField()
+    component = serializers.SerializerMethodField()
     marksObtained = serializers.DecimalField(source='marks_obtained', max_digits=5, decimal_places=2)
 
     class Meta:
         model = ExamResult
-        fields = ['examPaper', 'marksObtained', 'status', 'remarks']
+        fields = ['component', 'marksObtained', 'status', 'remarks']
 
-    def get_examPaper(self, obj):
-        paper = obj.exam_paper
+    def get_component(self, obj):
+        c = obj.component
         return {
-            'id': paper.id,
-            'subject_name': paper.subject.name,
-            'duration': paper.duration,
-            'type': paper.type,
-            'total_marks': paper.total_marks,
-            'exam_date': paper.exam_date,
+            'id': c.id,
+            'type': c.type,
+            'subject_name': c.exam_paper.subject.name,
+            'duration': c.duration,
+            'marks_allocated': c.marks_allocated,
+            'exam_date': c.exam_date,
         }
 
 class EnrollmentStudentMinimalSerializer(serializers.ModelSerializer):
@@ -252,13 +263,13 @@ class EnrollmentStudentMinimalSerializer(serializers.ModelSerializer):
         return ExamResultInfoSerializer(results, many=True).data
 
 class ShareLinkCreateSerializer(serializers.Serializer):
-    exam_paper = serializers.PrimaryKeyRelatedField(queryset=ExamPaper.objects.all())
+    component = serializers.PrimaryKeyRelatedField(queryset=ExamPaperComponent.objects.all())
     expires_in_days = serializers.IntegerField(required=False, default=7, min_value=1, max_value=365)
 
     def create(self, validated_data):
         expires_in = validated_data.pop('expires_in_days', 7)
         link = ExamResultShareLink.objects.create(
-            exam_paper=validated_data['exam_paper'],
+            component=validated_data['component'],
             expires_at=timezone.now() + timedelta(days=expires_in)
         )
         return link
@@ -269,7 +280,7 @@ class ShareLinkSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ExamResultShareLink
-        fields = ['id', 'exam_paper', 'code', 'is_active', 'is_expired', 'expires_at', 'created_at']
+        fields = ['id', 'component', 'code', 'is_active', 'is_expired', 'expires_at', 'created_at']
 
 class ShareLinkDataSerializer(serializers.Serializer):
     exam = ExamListSerializer()
@@ -280,7 +291,7 @@ class ShareLinkResultSubmitSerializer(serializers.Serializer):
     results = ExamResultItemSerializer(many=True)
 
     def create(self, validated_data):
-        exam_paper = self.context['exam_paper']
+        component = self.context['component']
         results_data = validated_data['results']
 
         created = []
@@ -288,17 +299,17 @@ class ShareLinkResultSubmitSerializer(serializers.Serializer):
 
         with transaction.atomic():
             for item in results_data:
-                if item['marks_obtained'] > exam_paper.total_marks:
+                if item['marks_obtained'] > component.marks_allocated:
                     raise serializers.ValidationError(
-                        f"Student {item['student'].id} marks exceed paper limit."
+                        f"Student {item['student'].id} marks exceed component limit."
                     )
 
                 result, is_new = ExamResult.objects.update_or_create(
-                    exam_paper=exam_paper,
+                    component=component,
                     student=item['student'],
                     defaults={
                         'marks_obtained': item['marks_obtained'],
-                        'status': item['status'],
+                        'status': item.get('status', 'PENDING'),
                         'remarks': item.get('remarks', ''),
                     }
                 )
@@ -308,4 +319,3 @@ class ShareLinkResultSubmitSerializer(serializers.Serializer):
                     updated.append(result)
 
         return {'_created': created, '_updated': updated}
-

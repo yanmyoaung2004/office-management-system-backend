@@ -498,29 +498,49 @@ class Exam(BaseIDModel):
     semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
     date_started = models.DateField()
 
-def exam_question_path(instance, filename):
-    return f'exams/{instance.exam.id}/{instance.subject.code}/{filename}'
-class ExamPaper(BaseIDModel):
-    # This handles "In each exam there are many subjects"
+def component_question_path(instance, filename):
+    return f"exams/{instance.exam_paper.exam.id}/{instance.exam_paper.subject.code}/{instance.type}/{filename}"
+
+class ExamPaper(models.Model):
+    exam = models.ForeignKey('Exam', related_name='papers', on_delete=models.CASCADE)
+    subject = models.ForeignKey('Subject', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('exam', 'subject')
+
+    def __str__(self):
+        return f"{self.exam.title} - {self.subject.name}"
+
+
+class ExamPaperComponent(models.Model):
     class ExamType(models.TextChoices):
         ASSIGNMENT = 'ASSIGNMENT', 'Assignment'
         PRESENTATION = 'PRESENTATION', 'Presentation'
         ONPAPER = 'ONPAPER', 'Onpaper'
-    exam = models.ForeignKey(Exam, related_name='papers', on_delete=models.CASCADE)
-    subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
-    duration = models.DurationField(help_text="Duration of the exam paper (e.g., 1:30:00 for 1 hour 30 minutes)")
+
+    exam_paper = models.ForeignKey(
+        ExamPaper, related_name='components', on_delete=models.CASCADE
+    )
     type = models.CharField(max_length=20, choices=ExamType.choices)
-    total_marks = models.IntegerField(default=100)
-    exam_date = models.DateTimeField()
+    exam_date = models.DateTimeField(
+        help_text="The specific deadline or date/time this component takes place."
+    )
+    duration = models.DurationField(
+        help_text="Duration specifically for this part (e.g., '02:00:00' for paper, '00:15:00' for presentation)"
+    )
+    marks_allocated = models.IntegerField(default=100)
     question_file = models.FileField(
-        upload_to=exam_question_path,
+        upload_to=component_question_path,
         validators=[FileExtensionValidator(allowed_extensions=['pdf', 'doc', 'docx'])],
-        null=True,
-        blank=True
+        null=True, blank=True
     )
 
     class Meta:
-        unique_together = ('exam', 'subject') #
+        unique_together = ('exam_paper', 'type')
+
+    def __str__(self):
+        return f"{self.exam_paper.subject.name} ({self.get_type_display()}) - {self.exam_date.strftime('%Y-%m-%d')}" 
 
 
 class ExamResult(BaseIDModel):
@@ -534,8 +554,8 @@ class ExamResult(BaseIDModel):
         on_delete=models.CASCADE, 
         related_name='exam_results'
     )
-    exam_paper = models.ForeignKey(
-        'ExamPaper', 
+    component = models.ForeignKey(
+        'ExamPaperComponent', 
         on_delete=models.CASCADE, 
         related_name='results'
     )
@@ -553,21 +573,21 @@ class ExamResult(BaseIDModel):
     remarks = models.TextField(blank=True, null=True)
     
     class Meta:
-        unique_together = ('student', 'exam_paper')
+        unique_together = ('student', 'component')
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.student.full_name} - {self.exam_paper.subject.name}: {self.marks_obtained}"
+        return f"{self.student.full_name} - {self.component.exam_paper.subject.name}: {self.marks_obtained}"
 
     @property
     def percentage(self):
-        if self.exam_paper.total_marks > 0:
-            return (self.marks_obtained / self.exam_paper.total_marks) * 100
+        if self.component.marks_allocated > 0:
+            return (self.marks_obtained / self.component.marks_allocated) * 100
         return 0
 
 class ExamResultShareLink(models.Model):
-    exam_paper = models.ForeignKey(
-        ExamPaper, on_delete=models.CASCADE, related_name='share_links'
+    component = models.ForeignKey(
+        ExamPaperComponent, on_delete=models.CASCADE, related_name='share_links'
     )
     code = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     is_active = models.BooleanField(default=True)
@@ -586,6 +606,6 @@ class ExamResultShareLink(models.Model):
         return timezone.now() > self.expires_at
 
     def __str__(self):
-        return f"Share:{self.code} - {self.exam_paper.subject.name}"
+        return f"Share:{self.code} - {self.component.exam_paper.subject.name}"
 
 

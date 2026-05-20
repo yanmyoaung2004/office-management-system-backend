@@ -4,8 +4,8 @@ from django.db import transaction
 from django.utils.translation import gettext_lazy as _
 from django.contrib.auth import authenticate
 from core.models import (
-    User, Major, Year, Semester, Intake, Student, Enquiry, Subject,
-    FollowUpSession, Dropout, Enrollment,  Department, Role,
+    User, Major, Year, Semester, Intake, IntakeSemester, Student, Enquiry, Subject,
+    FollowUpSession, Dropout, Enrollment, Notification, Department, Role,
     SemesterSubject
 )
 
@@ -363,7 +363,34 @@ class IntakeCreateSerializer(serializers.ModelSerializer):
         fields = ['code', 'majorId', 'year', 'startDate', 'endDate', 'capacity', 'currentSemId', 'semester_schedules']
 
     def create(self, validated_data):
-        return super().create(validated_data)
+        schedules_data = validated_data.pop('semester_schedules', [])
+        intake = Intake.objects.create(**validated_data)
+        for sched in schedules_data:
+            IntakeSemester.objects.create(
+                intake=intake,
+                semester_id=sched['semester_id'],
+                start_date=sched['start_date'],
+                end_date=sched['end_date'],
+            )
+        return intake
+
+    def update(self, instance, validated_data):
+        schedules_data = validated_data.pop('semester_schedules', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if schedules_data is not None:
+            instance.scheduled_semesters.all().delete()
+            for sched in schedules_data:
+                IntakeSemester.objects.create(
+                    intake=instance,
+                    semester_id=sched['semester_id'],
+                    start_date=sched['start_date'],
+                    end_date=sched['end_date'],
+                )
+
+        return instance
 
 # Student
 class EnrollmentSerializer(serializers.ModelSerializer):
