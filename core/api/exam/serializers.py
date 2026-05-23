@@ -319,3 +319,94 @@ class ShareLinkResultSubmitSerializer(serializers.Serializer):
                     updated.append(result)
 
         return {'_created': created, '_updated': updated}
+
+
+class SubjectResultStudentSerializer(serializers.Serializer):
+    student = serializers.SlugRelatedField(
+        slug_field='school_id',
+        queryset=Student.objects.all()
+    )
+    marks_obtained = serializers.DecimalField(max_digits=5, decimal_places=2)
+    status = serializers.ChoiceField(
+        choices=ExamResult.Status.choices, required=False, default='PENDING'
+    )
+    remarks = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class SubjectResultComponentSerializer(serializers.Serializer):
+    type = serializers.ChoiceField(choices=ExamPaperComponent.ExamType.choices)
+    students = SubjectResultStudentSerializer(many=True)
+
+
+class SubjectBulkResultSerializer(serializers.Serializer):
+    exam = serializers.PrimaryKeyRelatedField(queryset=Exam.objects.all())
+    subject = serializers.PrimaryKeyRelatedField(queryset=Subject.objects.all())
+    results = SubjectResultComponentSerializer(many=True)
+
+    def validate(self, data):
+        exam = data['exam']
+        subject = data['subject']
+
+        try:
+            paper = ExamPaper.objects.get(exam=exam, subject=subject)
+        except ExamPaper.DoesNotExist:
+            raise serializers.ValidationError(
+                f"No exam paper found for exam '{exam.id}' and subject '{subject.id}'."
+            )
+        data['_paper'] = paper
+
+        available_types = set(
+            paper.components.values_list('type', flat=True)
+        )
+        requested_types = {r['type'] for r in data['results']}
+        missing = requested_types - available_types
+        if missing:
+            raise serializers.ValidationError(
+                f"Component type(s) {missing} not found in paper '{paper.id}'. "
+                f"Available: {available_types}"
+            )
+
+        components = {
+            c.type: c
+            for c in paper.components.filter(type__in=requested_types)
+        }
+        data['_components'] = components
+
+        for item in data['results']:
+            comp = components[item['type']]
+            for s in item['students']:
+                if s['marks_obtained'] > comp.marks_allocated:
+                    raise serializers.ValidationError(
+                        f"Student '{s['student'].school_id}' marks {s['marks_obtained']} "
+                        f"exceed component '{comp.type}' limit of {comp.marks_allocated}."
+                    )
+
+        return data
+
+    def create(self, validated_data):
+        results_data = validated_data.pop('results')
+        components = validated_data.pop('_components')
+        validated_data.pop('_paper')
+
+        created = []
+        updated = []
+
+        with transaction.atomic():
+            for item in results_data:
+                comp = components[item['type']]
+                for s in item['students']:
+                    result, is_new = ExamResult.objects.update_or_create(
+                        component=comp,
+                        student=s['student'],
+                        defaults={
+                            'marks_obtained': s['marks_obtained'],
+                            'status': s.get('status', 'PENDING'),
+                            'remarks': s.get('remarks', ''),
+                        }
+                    )
+                    if is_new:
+                        created.append(result)
+                    else:
+                        updated.append(result)
+
+        return {'_created': created, '_updated': updated}

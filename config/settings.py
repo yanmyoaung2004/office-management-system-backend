@@ -14,6 +14,8 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*'] #'192.168.88.248',
 
+COLLEGE_NAME = os.environ.get('COLLEGE_NAME', 'STI Myanmar College (Mandalay Campus)')
+
 # settings.py
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
