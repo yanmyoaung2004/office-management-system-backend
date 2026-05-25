@@ -37,6 +37,7 @@ urlpatterns = [
     # # Subjects
     path('semesters/<str:pk>/subjects', views.SemesterSubjectView.as_view(), name='semester-subjects'),
 
+    path('subject-hierarchy', views.SubjectHierarchyView.as_view(), name='subject-hierarchy'),
     path('chart-data', views.DashboardSummaryView.as_view(), name='chart-data'),
     path('filter-data', views.FilterDataView.as_view(), name='filter-data'),
     

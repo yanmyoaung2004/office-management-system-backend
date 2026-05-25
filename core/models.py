@@ -585,6 +585,79 @@ class ExamResult(BaseIDModel):
             return (self.marks_obtained / self.component.marks_allocated) * 100
         return 0
 
+
+class Teacher(BaseIDModel):
+    """Teacher who can be assigned to subjects and scheduled for classes."""
+    name = models.CharField(max_length=255)
+    phone_number = models.CharField(max_length=50)
+    email = models.EmailField(blank=True, null=True)
+    subjects = models.ManyToManyField(Subject, related_name='teachers')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+
+class TeacherAvailability(models.Model):
+    SLOT_CHOICES = [
+        ('9-11', '9:00 AM - 11:00 AM'),
+        ('12-2', '12:00 PM - 2:00 PM'),
+        ('2-4', '2:00 PM - 4:00 PM'),
+    ]
+    DAY_CHOICES = [
+        (1, 'Monday'),
+        (2, 'Tuesday'),
+        (3, 'Wednesday'),
+        (4, 'Thursday'),
+        (5, 'Friday'),
+    ]
+    teacher = models.ForeignKey(
+        Teacher, on_delete=models.CASCADE, related_name='availabilities'
+    )
+    day_of_week = models.IntegerField(choices=DAY_CHOICES)
+    slot = models.CharField(max_length=5, choices=SLOT_CHOICES)
+    is_available = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ('teacher', 'day_of_week', 'slot')
+        verbose_name_plural = 'Teacher availabilities'
+
+    def __str__(self):
+        return f"{self.teacher.name} - {self.get_day_of_week_display()} {self.get_slot_display()}"
+
+
+class IntakeSubjectFrequency(models.Model):
+    intake = models.ForeignKey(Intake, on_delete=models.CASCADE, related_name='subject_frequencies')
+    semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
+    frequency = models.PositiveSmallIntegerField(help_text='Number of classes per week')
+
+    class Meta:
+        unique_together = ('intake', 'semester', 'subject')
+        verbose_name_plural = 'Intake subject frequencies'
+
+    def __str__(self):
+        return f"{self.intake.code} - {self.subject.code} x{self.frequency}"
+
+
+class ClassSchedule(models.Model):
+    SLOT_CHOICES = TeacherAvailability.SLOT_CHOICES
+    DAY_CHOICES = TeacherAvailability.DAY_CHOICES
+
+    intake = models.ForeignKey(Intake, on_delete=models.CASCADE, related_name='class_schedules')
+    semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
+    teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE)
+    day_of_week = models.IntegerField(choices=DAY_CHOICES)
+    slot = models.CharField(max_length=5, choices=SLOT_CHOICES)
+
+    class Meta:
+        unique_together = ('intake', 'semester', 'day_of_week', 'slot')
+
+    def __str__(self):
+        return f"{self.intake.code} - {self.get_day_of_week_display()} {self.get_slot_display()} - {self.subject.code} ({self.teacher.name})"
+
 class ExamResultShareLink(models.Model):
     component = models.ForeignKey(
         ExamPaperComponent, on_delete=models.CASCADE, related_name='share_links'

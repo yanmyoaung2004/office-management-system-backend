@@ -410,3 +410,72 @@ class SubjectBulkResultSerializer(serializers.Serializer):
                         updated.append(result)
 
         return {'_created': created, '_updated': updated}
+
+from core.models import Teacher, TeacherAvailability, IntakeSubjectFrequency, ClassSchedule
+
+class TeacherSerializer(serializers.ModelSerializer):
+    subject_ids = serializers.PrimaryKeyRelatedField(
+        source='subjects', queryset=Subject.objects.all(), many=True, write_only=True
+    )
+    subjects_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Teacher
+        fields = ['id', 'name', 'phone_number', 'email', 'subject_ids', 'subjects_display', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'subjects_display']
+
+    def get_subjects_display(self, obj):
+        return [{'id': s.id, 'code': s.code, 'name': s.name} for s in obj.subjects.all()]
+
+    def create(self, validated_data):
+        teacher = super().create(validated_data)
+        TeacherAvailability.objects.bulk_create([
+            TeacherAvailability(teacher=teacher, day_of_week=d, slot=s)
+            for d in range(1, 6) for s in ['9-11', '12-2', '2-4']
+        ])
+        return teacher
+
+class TeacherAvailabilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TeacherAvailability
+        fields = ['id', 'teacher', 'day_of_week', 'slot', 'is_available']
+        extra_kwargs = {'teacher': {'required': False}}
+
+class TeacherAvailabilityBatchSerializer(serializers.Serializer):
+    availabilities = TeacherAvailabilitySerializer(many=True)
+
+    def create(self, validated_data):
+        teacher = self.context['teacher']
+        items = validated_data['availabilities']
+        created = []
+        with transaction.atomic():
+            TeacherAvailability.objects.filter(teacher=teacher).delete()
+            for item in items:
+                obj, _ = TeacherAvailability.objects.update_or_create(
+                    teacher=teacher,
+                    day_of_week=item['day_of_week'],
+                    slot=item['slot'],
+                    defaults={'is_available': item.get('is_available', True)}
+                )
+                created.append(obj)
+        return created
+
+class IntakeSubjectFrequencySerializer(serializers.ModelSerializer):
+    subject_code = serializers.ReadOnlyField(source='subject.code')
+    subject_name = serializers.ReadOnlyField(source='subject.name')
+
+    class Meta:
+        model = IntakeSubjectFrequency
+        fields = ['id', 'intake', 'semester', 'subject', 'subject_code', 'subject_name', 'frequency']
+
+class ClassScheduleSerializer(serializers.ModelSerializer):
+    subject_code = serializers.ReadOnlyField(source='subject.code')
+    subject_name = serializers.ReadOnlyField(source='subject.name')
+    teacher_name = serializers.ReadOnlyField(source='teacher.name')
+
+    class Meta:
+        model = ClassSchedule
+        fields = [
+            'id', 'intake', 'semester', 'subject', 'subject_code', 'subject_name',
+            'teacher', 'teacher_name', 'day_of_week', 'slot'
+        ]

@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import (
+    Teacher, TeacherAvailability, IntakeSubjectFrequency, ClassSchedule,
     User, Major, Intake, Student, Enquiry,
     FollowUpSession,  Dropout, Enrollment, Notification
 )
@@ -80,3 +81,21 @@ class NotificationAdmin(admin.ModelAdmin):
     list_display = ('title', 'user', 'is_read', 'created_at')
     list_filter = ('is_read', 'alert_type')
     search_fields = ('message', 'student__first_name', 'student__last_name')
+
+@admin.register(Teacher)
+class TeacherAdmin(admin.ModelAdmin):
+    list_display = ['name', 'phone_number', 'email']
+    filter_horizontal = ['subjects']
+
+@admin.register(TeacherAvailability)
+class TeacherAvailabilityAdmin(admin.ModelAdmin):
+    list_display = ['teacher', 'day_of_week', 'slot', 'is_available']
+    list_filter = ['day_of_week', 'slot', 'is_available']
+
+@admin.register(IntakeSubjectFrequency)
+class IntakeSubjectFrequencyAdmin(admin.ModelAdmin):
+    list_display = ['intake', 'semester', 'subject', 'frequency']
+
+@admin.register(ClassSchedule)
+class ClassScheduleAdmin(admin.ModelAdmin):
+    list_display = ['intake', 'semester', 'day_of_week', 'slot', 'subject', 'teacher']

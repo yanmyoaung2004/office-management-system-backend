@@ -12,8 +12,8 @@ from collections import defaultdict
 from core.decorators import role_required
 from core.utils import  paginate_response, success_response, error_response
 from core.models import (
-     Major, Intake,  Enquiry, Semester, IntakeSemester, 
-    FollowUpSession, Enrollment, SemesterSubject
+     Major, Intake,  Enquiry, Semester, Year, IntakeSemester, 
+    FollowUpSession, Enrollment, SemesterSubject, Subject
 )
 from .serializers import (
     MajorDetailSerializer, SchoolIdUpdateSerializer,
@@ -678,4 +678,29 @@ class SemesterSubjectView(APIView):
             return error_response('Subject not found in this semester.', 'NOT_FOUND', status.HTTP_404_NOT_FOUND)
 
         return success_response(message="Subject removed from semester.")
+
+
+class SubjectHierarchyView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @method_decorator(role_required('view_major'))
+    def get(self, request):
+        majors = Major.objects.prefetch_related(
+            'years__semesters__subjects'
+        ).order_by('name')
+
+        result = {}
+        for major in majors:
+            major_dict = {}
+            years = major.years.all().order_by('yearNumber')
+            for year in years:
+                year_dict = {}
+                semesters = year.semesters.all().order_by('semester_number')
+                for sem in semesters:
+                    subjects = sem.subjects.all().order_by('code')
+                    year_dict[sem.name] = SubjectSerializer(subjects, many=True).data
+                major_dict[year.name] = year_dict
+            result[major.name] = major_dict
+
+        return success_response(data=result)
 
